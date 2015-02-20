@@ -1,0 +1,4 @@
+*.o
+gohttpd
+TAGS
+valgrind.out
