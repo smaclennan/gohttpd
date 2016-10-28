@@ -47,7 +47,6 @@ static unsigned n_requests;
 static int      n_connections; /* yes signed, I want to know if it goes -ve */
 static time_t   started;
 
-/* Add an extra connection for error replies */
 static struct connection *conns;
 
 static struct pollfd *ufds;
@@ -55,7 +54,7 @@ static int npoll;
 
 static uid_t root_uid;
 
-#define MAX_SERVER_STRING	600
+#define MAX_SERVER_STRING	48
 static char *server_str;
 
 #define HTML_INDEX_FILE	"index.html"
@@ -72,8 +71,6 @@ static int gohttpd_stats(struct connection *conn);
 static void check_old_connections(void);
 static unsigned char *mmap_get(struct connection *conn, int fd);
 static void mmap_release(struct connection *conn);
-static int http_init(void);
-static void http_cleanup(void);
 static int http_get(struct connection *conn);
 static int http_error(struct connection *conn, int status);
 static void close_connection(struct connection *conn, int status);
@@ -104,7 +101,7 @@ static void cleanup(void)
 	struct connection *conn;
 	int i;
 
-	http_cleanup();
+	free(server_str);
 
 	close(ufds[0].fd); /* accept socket */
 
@@ -178,7 +175,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	http_init();
+	server_str = must_strdup("Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n");
 
 	if (go_daemon) {
 		if (daemon(0, 0) == -1)
@@ -653,16 +650,13 @@ static int gohttpd_stats(struct connection *conn)
 	int n;
 
 	n = snprintf(buf, sizeof(buf),
-			 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
-			 "Requests:     %10u\r\n"
-			 "Max parallel: %10u\r\n"
-			 "Max length:   %10u\r\n"
-			 "Connections:  %10d\r\n",
-			 uptime(up, sizeof(up)),
-			 n_requests,
-			 max_requests, max_length,
-			 /* we are an outstanding connection */
-			 n_connections - 1);
+				 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+				 "Requests:     %10u\r\n"
+				 "Max parallel: %10u\r\n"
+				 "Max length:   %10u\r\n",
+				 uptime(up, sizeof(up)),
+				 n_requests,
+				 max_requests, max_length);
 
 	if (bad_munmaps)
 		snprintf(buf + n, sizeof(buf) - n, "BAD UNMAPS:   %10u\r\n", bad_munmaps);
@@ -901,31 +895,6 @@ static int do_dir(struct connection *conn, int fd, const char *dirname)
 		n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
 					  "<a href=\"../\">Parent Directory/</a><br>\n");
 
-#if 0
-	struct dirent *ent;
-	DIR *dir = fdopendir(fd);
-
-	while ((ent = readdir(dir)))
-		if (*ent->d_name != '.') {
-			if (*(dirname + 1))
-				snprintf(path, sizeof(path), "%s%s", dirname, ent->d_name);
-			else
-				snprintf(path, sizeof(path), "%s", ent->d_name);
-			if (stat(path, &sbuf) == 0) {
-				if (S_ISDIR(sbuf.st_mode))
-					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-								  "<a href=\"%s/\">%s/</a><br>\n",
-								  ent->d_name, ent->d_name);
-				else
-					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-								  "<a href=\"%s\">%s</a><br>\n",
-								  ent->d_name, ent->d_name);
-			}
-			else perror(path); // SAM DBG
-		}
-
-	closedir(dir); /* also closes fd */
-#else
 	close(fd);
 
 	struct dirent **namelist, *ent;
@@ -963,7 +932,6 @@ static int do_dir(struct connection *conn, int fd, const char *dirname)
 	}
 
 	free(namelist);
-#endif
 
 	conn->buf = (unsigned char *)strdup(dirbuf);
 
@@ -1076,25 +1044,6 @@ int http_get(struct connection *conn)
 		set_writeable(conn);
 
 	return rc;
-}
-
-static int http_init(void)
-{
-	char str[MAX_SERVER_STRING];
-	struct utsname uts;
-
-	uname(&uts);
-
-	snprintf(str, sizeof(str), "Server: gohttpd/%.8s (%.512s)\r\n",
-		GOHTTPD_VERSION, uts.sysname);
-	server_str = must_strdup(str);
-
-	return 0;
-}
-
-static void http_cleanup(void)
-{
-	free(server_str);
 }
 
 static unsigned char *mmap_get(struct connection *conn, int fd)

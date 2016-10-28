@@ -27,6 +27,7 @@
 #include <sys/uio.h>
 #include <sys/poll.h>
 
+#define GOHTTPD_STR		"Apache"
 #define GOHTTPD_VERSION "0.1"
 
 #define MAX_LINE	2048 /* Older versions of Lynx send a huge line */
