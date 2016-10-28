@@ -29,7 +29,6 @@
 
 #define GOHTTPD_VERSION "0.1"
 
-#define MAX_HOSTNAME	65
 #define MAX_LINE	2048 /* Older versions of Lynx send a huge line */
 #define MIN_REQUESTS	4
 #define HTTP_BACKLOG	10 /* helps when backed up */
@@ -49,16 +48,8 @@
 #define HTTP_LOGFILE	"/var/log/gohttpd.log"
 #define HTTP_PIDFILE	"/var/run/gohttpd.pid"
 #define HTTP_CONFIG		"/etc/gohttpd.conf"
-#define HTTP_PORT	80
-
-/* Set to 1 to not log the local network (192.168.x.x).
- * Set to 0 to log everything. Do not undefine.
- */
-#define IGNORE_LOCAL	1
-
+#define HTTP_PORT		80
 #define HTTP_USER		"httpd"
-#define HTTP_UID		-1
-#define HTTP_GID		-1
 
 struct connection {
 	int conn_n;
@@ -84,12 +75,6 @@ struct connection {
 	char *http_header;
 };
 
-/* exported from gohttpd.c */
-extern int verbose;
-
-void close_connection(struct connection *conn, int status);
-int checkpath(char *path);
-
 /* exported from log.c */
 int  log_open(char *log_name);
 void log_hit(struct connection *conn, unsigned status);
@@ -101,7 +86,6 @@ int listen_socket(int port);
 int accept_socket(int sock, struct connection *conn);
 const char *ntoa(struct connection *conn); /* helper */
 void alloc_sock_addr(struct connection *conn);
-
 
 /* exported from config.c */
 extern char *config;
@@ -118,16 +102,6 @@ extern int   do_chroot;
 
 int read_config(char *fname);
 char *must_strdup(char *str);
-
-/* exported from http.c */
-int http_init(void);
-void http_cleanup(void);
-int http_get(struct connection *conn);
-int http_send_response(struct connection *conn);
-int http_error(struct connection *conn, int status);
-
-extern unsigned bad_munmaps;
-void mmap_release(struct connection *conn);
 
 #define SOCKET(c)	((c)->ufd->fd)
 

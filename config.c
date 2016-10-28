@@ -38,8 +38,8 @@ char *hostname;
 
 int   port = HTTP_PORT;
 char *user = HTTP_USER;
-uid_t uid  = HTTP_UID;
-gid_t gid  = HTTP_GID;
+uid_t uid  = -1;
+gid_t gid  = -1;
 int   max_conns     = 25;
 int   do_chroot     = -1;
 
