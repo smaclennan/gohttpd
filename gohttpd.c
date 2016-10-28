@@ -618,7 +618,6 @@ static void check_old_connections(void)
 		}
 }
 
-
 static void create_pidfile(char *fname)
 {
 	FILE *fp;
@@ -656,44 +655,22 @@ static void create_pidfile(char *fname)
 	}
 }
 
-
-#define NEED_WRITE(fd, b, l)			\
-	do {					\
-		rc = write(fd, b, l);		\
-		if (rc != l)			\
-			goto write_failed;	\
-	} while (0)
-
-int file_open(char *fname)
-{
-	return open(fname, O_RDONLY);
-}
-
-FILE *file_fopen(char *fname)
-{
-	int fd = file_open(fname);
-	if (fd < 0)
-		return NULL;
-	return fdopen(fd, "r");
-}
-
-
 #define SECONDS_IN_A_MINUTE	(60)
 #define SECONDS_IN_AN_HOUR	(SECONDS_IN_A_MINUTE * 60)
 #define SECONDS_IN_A_DAY	(SECONDS_IN_AN_HOUR * 24)
 
-static char *uptime(char *str)
+static char *uptime(char *str, int len)
 {
 	time_t up = time(NULL) - started;
 
 	if (up >= SECONDS_IN_A_DAY) {
 		up /= SECONDS_IN_A_DAY;
-		sprintf(str, "%ld %s", up, up == 1 ? "day" : "days");
+		snprintf(str, len, "%ld %s", up, up == 1 ? "day" : "days");
 	} else if (up >= SECONDS_IN_AN_HOUR) {
 		up /= SECONDS_IN_AN_HOUR;
-		sprintf(str, "%ld %s", up, up == 1 ? "hour" : "hours");
+		snprintf(str, len, "%ld %s", up, up == 1 ? "hour" : "hours");
 	} else
-		strcpy(str, "< 1 hour");
+		snprintf(str, len, "< 1 hour");
 
 	return str;
 }
@@ -702,23 +679,22 @@ static char *uptime(char *str)
 static int gohttpd_stats(struct connection *conn)
 {
 	char buf[200], up[12];
+	int n;
 
-	sprintf(buf,
-		"gohttpd " GOHTTPD_VERSION " %12s\r\n"
-		"Requests:     %10u\r\n"
-		"Max parallel: %10u\r\n"
-		"Max length:   %10u\r\n"
-		"Connections:  %10d\r\n",
-		uptime(up),
-		n_requests,
-		max_requests, max_length,
-		/* we are an outstanding connection */
-		n_connections - 1);
+	n = snprintf(buf, sizeof(buf),
+			 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+			 "Requests:     %10u\r\n"
+			 "Max parallel: %10u\r\n"
+			 "Max length:   %10u\r\n"
+			 "Connections:  %10d\r\n",
+			 uptime(up, sizeof(up)),
+			 n_requests,
+			 max_requests, max_length,
+			 /* we are an outstanding connection */
+			 n_connections - 1);
 
-	if (bad_munmaps) {
-		char *p = buf + strlen(buf);
-		sprintf(p, "BAD UNMAPS:   %10u\r\n", bad_munmaps);
-	}
+	if (bad_munmaps)
+		snprintf(buf + n, sizeof(buf) - n, "BAD UNMAPS:   %10u\r\n", bad_munmaps);
 
 	while (write(SOCKET(conn), buf, strlen(buf)) < 0 && errno == EINTR)
 		;

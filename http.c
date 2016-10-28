@@ -53,12 +53,6 @@ inline int write_out(int fd, char *buf, int len)
 }
 
 
-inline int write_str(int fd, char *str)
-{
-	return write_out(fd, str, strlen(str));
-}
-
-
 static void unquote(char *str)
 {
 	char *p, quote[3], *e;
@@ -420,14 +414,14 @@ int http_get(struct connection *conn)
 				return http_error1(conn, 301, request);
 			}
 			strcpy(p, HTML_INDEX_FILE);
-			if ((fd = file_open(dirname)) >= 0)
+			if ((fd = open(dirname, O_RDONLY)) >= 0)
 				isfile = 1;
 			else {
 				*p = '\0';
-				fd = file_open(dirname);
+				fd = open(dirname, O_RDONLY);
 			}
 		} else {
-			fd = file_open(dirname);
+			fd = open(dirname, O_RDONLY);
 			isfile = 1;
 		}
 	} else {
@@ -435,7 +429,7 @@ int http_get(struct connection *conn)
 			isfile = 1;
 		else {
 			strcpy(dirname, "/");
-			fd = file_open(".");
+			fd = open(".", O_RDONLY);
 		}
 	}
 

@@ -130,9 +130,6 @@ void mmap_release(struct connection *conn);
 int READ(int handle, char *whereto, int len);
 int WRITE(int handle, char *whereto, int len);
 
-int file_open(char *name);
-FILE *file_fopen(char *fname);
-
 #define SOCKET(c)	((c)->ufd->fd)
 
 #define set_readable(c, sock)				\
