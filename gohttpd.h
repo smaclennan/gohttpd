@@ -117,6 +117,7 @@ extern int   max_conns;
 extern int   do_chroot;
 
 int read_config(char *fname);
+char *must_strdup(char *str);
 
 /* exported from http.c */
 int http_init(void);
@@ -127,8 +128,6 @@ int http_error(struct connection *conn, int status);
 
 extern unsigned bad_munmaps;
 void mmap_release(struct connection *conn);
-int READ(int handle, char *whereto, int len);
-int WRITE(int handle, char *whereto, int len);
 
 #define SOCKET(c)	((c)->ufd->fd)
 

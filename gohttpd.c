@@ -64,7 +64,6 @@ static int write_request(struct connection *conn);
 static int gohttpd_stats(struct connection *conn);
 static void check_old_connections(void);
 
-
 /* SIGUSR1 is handled in log.c */
 static void sighandler(int signum)
 {
@@ -85,7 +84,6 @@ static void sighandler(int signum)
 		break;
 	}
 }
-
 
 static void cleanup(void)
 {
@@ -120,7 +118,6 @@ static void cleanup(void)
 
 	closelog();
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -492,7 +489,6 @@ static int new_connection(int csock)
 	}
 }
 
-
 static int read_request(struct connection *conn)
 {
 	int n;
@@ -560,7 +556,6 @@ static int read_request(struct connection *conn)
 	return 1;
 }
 
-
 static int write_request(struct connection *conn)
 {
 	int n, i;
@@ -599,7 +594,6 @@ static int write_request(struct connection *conn)
 
 	return 0;
 }
-
 
 static void check_old_connections(void)
 {
@@ -674,7 +668,6 @@ static char *uptime(char *str, int len)
 
 	return str;
 }
-
 
 static int gohttpd_stats(struct connection *conn)
 {

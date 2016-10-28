@@ -35,7 +35,6 @@
 
 /* Does not always return errors */
 /* Does not proxy external links */
-/* Maybe implement buffering in write_out */
 
 #define MAX_SERVER_STRING	600
 static char *server_str;
@@ -46,12 +45,6 @@ static int isdir(char *name);
 
 unsigned bad_munmaps;
 static unsigned char *mmap_get(struct connection *conn, int fd);
-
-inline int write_out(int fd, char *buf, int len)
-{
-	return WRITE(fd, buf, len);
-}
-
 
 static void unquote(char *str)
 {
@@ -182,13 +175,11 @@ static int http_error1(struct connection *conn, int status, char *request)
 	return 0;
 }
 
-
 /* For all but 301 errors */
 int http_error(struct connection *conn, int status)
 {
 	return http_error1(conn, status, "bogus");
 }
-
 
 static int http_build_response(struct connection *conn)
 {
@@ -462,93 +453,21 @@ static int isdir(char *name)
 
 int http_init(void)
 {
-	char str[600];
+	char str[MAX_SERVER_STRING];
 	struct utsname uts;
 
 	uname(&uts);
 
-	sprintf(str, "Server: gohttpd/%.8s (%.512s)\r\n",
+	snprintf(str, sizeof(str), "Server: gohttpd/%.8s (%.512s)\r\n",
 		GOHTTPD_VERSION, uts.sysname);
-
-	server_str = strdup(str);
-	if (!server_str) {
-		syslog(LOG_ERR, "http_init: Out of memory");
-		exit(1);
-	}
+	server_str = must_strdup(str);
 
 	return 0;
 }
 
-
 void http_cleanup(void)
 {
-	if (server_str)
-		free(server_str);
-}
-
-/* added by folkert@vanheusden.com */
-/* This function takes away all the hassle when working
- * with read(). Blocking reads only.
- */
-int READ(int handle, char *whereto, int len)
-{
-	int cnt = 0;
-
-	while (1) {
-		int rc;
-
-		rc = read(handle, whereto, len);
-
-		if (rc == -1) {
-			if (errno != EINTR) {
-				syslog(LOG_DEBUG,
-				       "READ(): io-error [%d - %s]",
-				       errno, strerror(errno));
-				return -1;
-			}
-		} else if (rc == 0)
-			return cnt;
-		else {
-			whereto += rc;
-			len -= rc;
-			cnt += rc;
-		}
-	}
-
-	return cnt;
-}
-
-
-/* added by folkert@vanheusden.com */
-/* this function takes away all the hassle when working
- * with write(). Blocking writes only.
- */
-int WRITE(int handle, char *whereto, int len)
-{
-	int cnt = 0;
-
-	while (len > 0) {
-		int rc;
-
-		rc = write(handle, whereto, len);
-
-		if (rc == -1) {
-			if (errno != EINTR) {
-				syslog(LOG_DEBUG,
-				       "WRITE(): io-error [%d - %s]",
-				       errno, strerror(errno));
-				return -1;
-			}
-		} else if (rc == 0)
-			return cnt;
-		else {
-			whereto += rc;
-			len -= rc;
-			cnt += rc;
-		}
-	}
-
-	return cnt;
+	free(server_str);
 }
 
 static unsigned char *mmap_get(struct connection *conn, int fd)
