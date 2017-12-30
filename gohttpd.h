@@ -102,7 +102,6 @@ extern int   max_conns;
 extern int   do_chroot;
 
 int read_config(char *fname);
-char *must_strdup(char *str);
 
 #define SOCKET(c)	((c)->ufd->fd)
 

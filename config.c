@@ -44,7 +44,7 @@ int   do_chroot     = -1;
 
 
 /* If we are already out of memory, we are in real trouble */
-char *must_strdup(char *str)
+static char *must_strdup(char *str)
 {
 	char *new = strdup(str);
 	if (!new) {

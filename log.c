@@ -33,8 +33,14 @@
 
 static FILE *log_fp;
 static char *log_name;
+static int need_reopen;
 
-static void log_reopen(int sig)
+static void sig_reopen(int sig)
+{
+	need_reopen = 1;
+}
+
+static void log_reopen(void)
 {
 	fclose(log_fp);
 
@@ -59,7 +65,7 @@ int log_open(char *logname)
 	} else
 		log_name = logname;
 
-	signal(SIGUSR1, log_reopen);
+	signal(SIGUSR1, sig_reopen);
 
 	log_fp = fopen(logname, "a");
 	if (log_fp == NULL)
@@ -124,6 +130,11 @@ void log_hit(struct connection *conn, unsigned status)
 
 	if (!log_fp)
 		return; /* nowhere to write! */
+
+	if (need_reopen) {
+		log_reopen();
+		need_reopen = 0;
+	}
 
 	time(&now);
 	t = localtime(&now);
