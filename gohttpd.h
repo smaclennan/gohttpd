@@ -47,12 +47,14 @@
 #define POLL_TIMEOUT	 1	/* seconds */
 #define MAX_IDLE_TIME	60	/* seconds */
 
-#define HTTP_ROOT		"/var/www"
-#define HTTP_LOGFILE	"/var/log/gohttpd.log"
+#define HTTP_ROOT		"/var/www/htdocs"
 #define HTTP_PIDFILE	"/var/run/gohttpd.pid"
 #define HTTP_CONFIG		"/etc/gohttpd.conf"
 #define HTTP_PORT		80
-#define HTTP_USER		"httpd"
+#define HTTP_USER		"apache"
+
+#define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
+#define HTTP_LOG_CHROOT	"/log/gohttpd.log"
 
 struct connection {
 	int conn_n;

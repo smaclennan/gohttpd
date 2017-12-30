@@ -5,7 +5,7 @@ CC = cc
 
 # If you set D=1 on the command line then $(D:1=-g)
 # returns -g, else it returns the default (-O2).
-D = -g # SAM debug to -g during development -O2
+D = -O2
 CFLAGS += -Wall $(D:1=-g)
 
 ETAGS=`which etags || echo true`

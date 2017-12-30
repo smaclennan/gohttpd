@@ -289,16 +289,10 @@ static void gohttpd(char *name)
 
 	setup_privs();
 
-	/* Do this *before* chroot */
-	log_open(logfile);
-
-	if (do_chroot == -1)
-		do_chroot = getuid() == 0;
 	if (do_chroot && chroot(root_dir)) {
 		perror("chroot");
 		exit(1);
-	} else
-		syslog(LOG_WARNING, "No chroot.");
+	}
 
 	signal(SIGHUP,  sighandler);
 	signal(SIGTERM, sighandler);
@@ -335,6 +329,9 @@ static void gohttpd(char *name)
 
 	/* Now it is safe to install */
 	atexit(cleanup);
+
+	/* Do this after chroot */
+	log_open(logfile);
 
 	main_loop(csock);
 }

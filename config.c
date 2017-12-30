@@ -120,11 +120,14 @@ int read_config(char *fname)
 		fclose(fp);
 	}
 
+	if (do_chroot == -1)
+		do_chroot = getuid() == 0;
+
 	/* Default'em */
 	if (root_dir == NULL)
 		root_dir = must_strdup(HTTP_ROOT);
 	if (logfile == NULL)
-		logfile  = must_strdup(HTTP_LOGFILE);
+		logfile  = must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
 	if (pidfile == NULL)
 		pidfile  = must_strdup(HTTP_PIDFILE);
 
