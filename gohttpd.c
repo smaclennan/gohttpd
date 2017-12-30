@@ -52,8 +52,6 @@ static struct connection *conns;
 static struct pollfd *ufds;
 static int npoll;
 
-#define MAX_SERVER_STRING	48
-
 #define HTML_INDEX_FILE	"index.html"
 
 unsigned bad_munmaps;
@@ -380,13 +378,13 @@ static void close_connection(struct connection *conn, int status)
 			--npoll;
 	}
 
-	if (conn->http_header) {
-		free(conn->http_header);
-		conn->http_header = NULL;
-	}
 	conn->http = 0;
 	conn->referer = NULL;
 	conn->user_agent = NULL;
+	if (conn->errorstr) {
+		free(conn->errorstr);
+		conn->errorstr = NULL;
+	}
 
 	conn->status = 200;
 
@@ -690,25 +688,69 @@ static char *msg_500 =
 /* This is a very specialized build_response just for errors.
    The request field is for the 301 errors.
 */
-static int http_error1(struct connection *conn, int status, char *request)
+static int http_error301(struct connection *conn, char *request)
 {
 	char str[MAX_LINE + MAX_LINE + MAX_SERVER_STRING + 512];
 	char *title, *p, *msg;
 
-	switch (status) {
-	case 301:
-		/* Be nice and give the moved address. */
-		title = "301 Moved Permanently";
-		sprintf(str,
+	/* Be nice and give the moved address. */
+	title = "301 Moved Permanently";
+	sprintf(str,
 			"The document has moved <a href=\"/%s/\">here</a>.",
 			request);
-		msg = strdup(str);
-		if (msg == NULL) {
-			syslog(LOG_WARNING, "http_error: Out of memory.");
-			close_connection(conn, status);
-			return 1;
-		}
-		break;
+	msg = strdup(str);
+	if (msg == NULL) {
+		syslog(LOG_WARNING, "http_error: Out of memory.");
+		close_connection(conn, 301);
+		return 1;
+	}
+
+	sprintf(str,
+			"HTTP/1.0 %s\r\n"
+			SERVER_STR
+			"Content-Type: text/html\r\n"
+			"Location: /%s/\r\n\r\n",
+			title, request);
+
+	/* Build the html body */
+	p = str + strlen(str);
+	sprintf(p,
+		"<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
+		"<html lang=\"en\">\n<head>\n"
+		"<title>%s</title>\r\n"
+		"</head>\n<body><h1>%s</h1>\r\n"
+		"<p>%s\r\n"
+		"</body></html>\r\n",
+		title, title, msg);
+
+	free(msg);
+
+	conn->errorstr = strdup(str);
+	if (conn->errorstr == NULL) {
+		syslog(LOG_WARNING, "http_error: Out of memory.");
+		free(msg);
+		close_connection(conn, 301);
+		return 1;
+	}
+
+	conn->status = 301;
+
+	conn->iovs[0].iov_base = conn->errorstr;
+	conn->iovs[0].iov_len  = strlen(conn->errorstr);
+	conn->n_iovs = 1;
+
+	set_writeable(conn);
+
+	return 0;
+}
+
+/* For all but 301 errors */
+int http_error(struct connection *conn, int status)
+{
+	char *title, *msg;
+	int n1, n2;
+
+	switch (status) {
 	case 400:
 		title = "400 Bad Request";
 		msg = msg_400;
@@ -736,96 +778,53 @@ static int http_error1(struct connection *conn, int status, char *request)
 		break;
 	}
 
-	sprintf(str,
-		"HTTP/1.0 %s\r\n"
-		"Server: %.*s"
-		"Content-Type: text/html\r\n",
-		title, MAX_SERVER_STRING, SERVER_STR);
-
-	if (status == 301) {
-		/* we must add the *real* location */
-		p = str + strlen(str);
-		sprintf(p, "Location: /%s/\r\n", request);
-	}
-
-	strcat(str, "\r\n");
+	n1 = snprintf(conn->http_header, sizeof(conn->http_header),
+				  "HTTP/1.0 %s\r\n"
+				  SERVER_STR
+				  "Content-Type: text/html\r\n\r\n",
+				  title);
 
 	/* Build the html body */
-	p = str + strlen(str);
-	sprintf(p,
-		"<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
-		"<html lang=\"en\">\n<head>\n"
-		"<title>%s</title>\r\n"
-		"</head>\n<body><h1>%s</h1>\r\n"
-		"<p>%s\r\n"
-		"</body></html>\r\n",
-		title, title, msg);
-
-	if (status == 301)
-		free(msg);
-
-	conn->http_header = strdup(str);
-	if (conn->http_header == NULL) {
-		syslog(LOG_WARNING, "http_error: Out of memory.");
-		if (status == 302)
-			free(msg);
-		close_connection(conn, status);
-		return 1;
-	}
+	n2 = snprintf(conn->tmp_buf, sizeof(conn->tmp_buf),
+				  "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
+				  "<html lang=\"en\">\n<head>\n"
+				  "<title>%s</title>\r\n"
+				  "</head>\n<body><h1>%s</h1>\r\n"
+				  "<p>%s\r\n"
+				  "</body></html>\r\n",
+				  title, title, msg);
 
 	conn->status = status;
 
 	conn->iovs[0].iov_base = conn->http_header;
-	conn->iovs[0].iov_len  = strlen(conn->http_header);
-	conn->n_iovs = 1;
+	conn->iovs[0].iov_len  = n1;
+	conn->iovs[1].iov_base = conn->tmp_buf;
+	conn->iovs[1].iov_len  = n2;
+	conn->n_iovs = 2;
 
 	set_writeable(conn);
 
 	return 0;
 }
 
-/* For all but 301 errors */
-int http_error(struct connection *conn, int status)
-{
-	return http_error1(conn, status, "bogus");
-}
-
 static int http_build_response(struct connection *conn)
 {
-	char str[1024], *p;
-
-	strcpy(str, "HTTP/1.1 200 OK\r\n");
-	strcat(str, SERVER_STR);
-	/* SAM We do not support persistant connections */
-	strcat(str, "Connection: close\r\n");
-	p = str;
-	p += strlen(p);
-	sprintf(p, "Content-Length: %d\r\n\r\n", conn->len);
-
-	conn->http_header = strdup(str);
-	if (conn->http_header == NULL) {
-		/* Just closing the connection is the best we can do */
-		syslog(LOG_WARNING, "Low on memory.");
-		close_connection(conn, 500);
-		return 1;
-	}
-
 	conn->status = 200;
 
-	return 0;
+	/* max about 91 */
+	return snprintf(conn->http_header, sizeof(conn->http_header),
+					"HTTP/1.1 200 OK\r\n"
+					SERVER_STR
+					"Connection: close\r\n"
+					"Content-Length: %d\r\n\r\n", conn->len);
 }
 
 static int do_file(struct connection *conn, int fd)
 {
 	conn->len = lseek(fd, 0, SEEK_END);
 
-	if (http_build_response(conn)) {
-		syslog(LOG_WARNING, "Out of memory");
-		return -1;
-	}
-
 	conn->iovs[0].iov_base = conn->http_header;
-	conn->iovs[0].iov_len  = strlen(conn->http_header);
+	conn->iovs[0].iov_len  = http_build_response(conn);
 
 	if (conn->http == HTTP_HEAD) {
 		/* no body to send */
@@ -931,13 +930,8 @@ static int do_dir(struct connection *conn, int fd, const char *dirname)
 
 	conn->len = conn->iovs[1].iov_len + conn->iovs[2].iov_len;
 
-	if (http_build_response(conn)) {
-		syslog(LOG_WARNING, "Out of memory");
-		return -1;
-	}
-
 	conn->iovs[0].iov_base = conn->http_header;
-	conn->iovs[0].iov_len  = strlen(conn->http_header);
+	conn->iovs[0].iov_len  = http_build_response(conn);
 	conn->len += conn->iovs[0].iov_len;
 
 	conn->n_iovs = 3;
@@ -994,7 +988,7 @@ int http_get(struct connection *conn)
 				/* We must send back a 301
 				 * response or relative
 				 * URLs will not work */
-				return http_error1(conn, 301, request);
+				return http_error301(conn, request);
 			}
 			strcpy(p, HTML_INDEX_FILE);
 			if ((fd = open(dirname, O_RDONLY)) >= 0)

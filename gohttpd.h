@@ -31,6 +31,7 @@
 #define GOHTTPD_VERSION "0.1"
 
 #define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
+#define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
 
 #define MAX_LINE	2048 /* Older versions of Lynx send a huge line */
 #define MIN_REQUESTS	4
@@ -78,7 +79,9 @@ struct connection {
 #define HTTP_HEAD	2
 	char *user_agent; /* combined log only */
 	char *referer;    /* combined log only */
-	char *http_header;
+	char http_header[128];
+	char tmp_buf[256];
+	char *errorstr;
 };
 
 /* exported from log.c */
