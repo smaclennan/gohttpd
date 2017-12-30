@@ -4,6 +4,12 @@ gohttpd_status() {
   PIDOF=$(pgrep -x gohttpd)
   if [ -n "$PIDOF" ]; then
     echo "gohttpd is running."
+
+    if [ "$1" = "full" ]; then
+	ROOT=$(readlink /proc/$PIDOF/root)
+	[ $ROOT != / ] && echo "  chroot $ROOT"
+	echo "  $(ls -ld /proc/$PIDOF | cut -d' ' -f3,4)"
+    fi
   else
     echo "gohttpd is stopped."
   fi
@@ -21,7 +27,7 @@ case $1 in
 	 ;;
 
   status)
-	  gohttpd_status
+	  gohttpd_status full
 	  ;;
 
   stop)
