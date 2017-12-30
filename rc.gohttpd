@@ -1,0 +1,36 @@
+#!/bin/sh
+
+gohttpd_status() {
+  PIDOF=$(pgrep -x gohttpd)
+  if [ -n "$PIDOF" ]; then
+    echo "gohttpd is running."
+  else
+    echo "gohttpd is stopped."
+  fi
+}
+
+case $1 in
+  start)
+	 if pgrep -x gohttpd; then
+	     echo "Error, gohttpd is already running."
+	 else
+	     echo "Starting gohttpd..."
+	     gohttpd -d
+	     gohttpd_status
+	 fi
+	 ;;
+
+  status)
+	  gohttpd_status
+	  ;;
+
+  stop)
+	echo "Stopping gohttpd..."
+	pkill -x gohttpd
+	gohttpd_status
+	;;
+
+  *)
+     echo "Unexpected command $1"
+     ;;
+esac
