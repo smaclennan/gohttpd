@@ -43,7 +43,6 @@ gid_t gid  = -1;
 int   max_conns     = 25;
 int   do_chroot     = -1;
 
-
 /* If we are already out of memory, we are in real trouble */
 static char *must_strdup(char *str)
 {
@@ -123,6 +122,9 @@ int read_config(char *fname)
 		}
 
 		fclose(fp);
+	} else if (errno != ENOENT) {
+		perror(fname);
+		exit(1);
 	}
 
 	if (do_chroot == -1)
