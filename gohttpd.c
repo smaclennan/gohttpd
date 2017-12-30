@@ -52,8 +52,6 @@ static struct connection *conns;
 static struct pollfd *ufds;
 static int npoll;
 
-static uid_t root_uid;
-
 #define MAX_SERVER_STRING	48
 
 #define HTML_INDEX_FILE	"index.html"
@@ -184,10 +182,8 @@ int main(int argc, char *argv[])
 
 static void setup_privs(void)
 {
-	root_uid = getuid();
-
 	/* If you are non-root you cannot set privileges */
-	if (root_uid) return;
+	if (getuid()) return;
 
 	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
 		struct passwd *pwd = getpwnam(user);
@@ -287,9 +283,10 @@ static void gohttpd(char *name)
 		exit(1);
 	}
 
+	/* Must setup privileges before chroot */
 	setup_privs();
 
-	if (do_chroot && chroot(root_dir)) {
+	if (do_chroot && chroot(chroot_dir)) {
 		perror("chroot");
 		exit(1);
 	}
@@ -330,7 +327,7 @@ static void gohttpd(char *name)
 	/* Now it is safe to install */
 	atexit(cleanup);
 
-	/* Do this after chroot */
+	/* Do this after chroot but before seteuid */
 	log_open(logfile);
 
 	main_loop(csock);
@@ -404,8 +401,6 @@ static int new_connection(int csock)
 	int sock;
 	int i;
 	struct connection *conn;
-
-	seteuid(root_uid);
 
 	while (1) {
 		/*

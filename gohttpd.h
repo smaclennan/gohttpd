@@ -48,13 +48,14 @@
 #define MAX_IDLE_TIME	60	/* seconds */
 
 #define HTTP_ROOT		"/var/www/htdocs"
+#define HTTP_CHROOT		"/var/www"
 #define HTTP_PIDFILE	"/var/run/gohttpd.pid"
 #define HTTP_CONFIG		"/etc/gohttpd.conf"
 #define HTTP_PORT		80
 #define HTTP_USER		"apache"
 
 #define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
-#define HTTP_LOG_CHROOT	"/log/gohttpd.log"
+#define HTTP_LOG_CHROOT	"/logs/gohttpd.log"
 
 struct connection {
 	int conn_n;
@@ -94,6 +95,7 @@ void alloc_sock_addr(struct connection *conn);
 /* exported from config.c */
 extern char *config;
 extern char *root_dir;
+extern char *chroot_dir;
 extern char *logfile;
 extern char *pidfile;
 extern int   port;

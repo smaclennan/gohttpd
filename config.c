@@ -32,6 +32,7 @@
 #include "gohttpd.h"
 
 char *root_dir;
+char *chroot_dir;
 char *logfile;
 char *pidfile;
 
@@ -91,6 +92,10 @@ int read_config(char *fname)
 				if (root_dir)
 					free(root_dir);
 				root_dir = must_strdup(val);
+			} else if (strcmp(key, "chroot-dir") == 0) {
+				if (chroot_dir)
+					free(chroot_dir);
+				chroot_dir = must_strdup(val);
 			} else if (strcmp(key, "logfile") == 0) {
 				if (logfile)
 					free(logfile);
@@ -126,6 +131,8 @@ int read_config(char *fname)
 	/* Default'em */
 	if (root_dir == NULL)
 		root_dir = must_strdup(HTTP_ROOT);
+	if (chroot_dir == NULL)
+		chroot_dir = must_strdup(HTTP_CHROOT);
 	if (logfile == NULL)
 		logfile  = must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
 	if (pidfile == NULL)
@@ -135,6 +142,14 @@ int read_config(char *fname)
 		printf("Root directory too long\n");
 		exit(1);
 	}
+
+	if (do_chroot)
+		/* root_dir must be inside chroot_dir */
+		if (strncmp(root_dir, chroot_dir, strlen(chroot_dir))) {
+			syslog(LOG_ERR, "%s not inside chroot %s", root_dir, chroot_dir);
+			printf("%s not inside chroot %s\n", root_dir, chroot_dir);
+			exit(1);
+		}
 
 	return 0;
 }

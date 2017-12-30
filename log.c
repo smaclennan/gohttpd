@@ -19,6 +19,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <syslog.h>
@@ -42,37 +43,30 @@ static void sig_reopen(int sig)
 
 static void log_reopen(void)
 {
-	fclose(log_fp);
+	if (log_fp) {
+		fclose(log_fp);
 
-	log_fp = fopen(log_name, "a");
-	if (log_fp == NULL)
-		syslog(LOG_ERR, "Reopen %s: %m", log_name);
+		log_fp = fopen(log_name, "a");
+		if (log_fp == NULL)
+			syslog(LOG_ERR, "Reopen %s: %m", log_name);
 
-	syslog(LOG_WARNING, "Log file reopened.");
+		syslog(LOG_WARNING, "Log file reopened.");
+	}
 }
 
-
-/* We are root and outside the chroot jail */
 int log_open(char *logname)
 {
-	int len = strlen(root_dir);
-
-	/* strip the chroot directory if necessary */
-	if (strncmp(logname, root_dir, len) == 0) {
-		log_name = logname + len;
-		if (*log_name != '/')
-			--log_name;
-	} else
-		log_name = logname;
-
-	signal(SIGUSR1, sig_reopen);
-
 	log_fp = fopen(logname, "a");
-	if (log_fp == NULL)
-		return 0;
+	if (log_fp == NULL) {
+		syslog(LOG_ERR, "Unable to open %s: %m", logname);
+		perror(logname);
+		exit(1);
+	}
 
 	if (fchown(fileno(log_fp), uid, gid))
 		perror("chown log file");
+
+	signal(SIGUSR1, sig_reopen);
 
 	return 1;
 }
