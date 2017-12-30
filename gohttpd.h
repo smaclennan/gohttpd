@@ -30,6 +30,8 @@
 #define GOHTTPD_STR		"Apache"
 #define GOHTTPD_VERSION "0.1"
 
+#define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
+
 #define MAX_LINE	2048 /* Older versions of Lynx send a huge line */
 #define MIN_REQUESTS	4
 #define HTTP_BACKLOG	10 /* helps when backed up */
@@ -80,7 +82,6 @@ struct connection {
 int  log_open(char *log_name);
 void log_hit(struct connection *conn, unsigned status);
 void log_close(void);
-void send_error(struct connection *conn, unsigned error);
 
 /* exported from socket.c */
 int listen_socket(int port);
@@ -93,7 +94,6 @@ extern char *config;
 extern char *root_dir;
 extern char *logfile;
 extern char *pidfile;
-extern char *hostname;
 extern int   port;
 extern char *user;
 extern uid_t uid;

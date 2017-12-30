@@ -34,7 +34,6 @@
 char *root_dir;
 char *logfile;
 char *pidfile;
-char *hostname;
 
 int   port = HTTP_PORT;
 char *user = HTTP_USER;
@@ -110,11 +109,7 @@ int read_config(char *fname)
 				must_strtol(val, (int *)&uid);
 			else if (strcmp(key, "gid") == 0)
 				must_strtol(val, (int *)&gid);
-			else if (strcmp(key, "host") == 0) {
-				if (hostname)
-					free(hostname);
-				hostname = must_strdup(val);
-			} else if (strcmp(key, "max-connections") == 0)
+			else if (strcmp(key, "max-connections") == 0)
 				must_strtol(val, &max_conns);
 			else if (strcmp(key, "chroot") == 0)
 				must_strtol(val, &do_chroot);
@@ -123,17 +118,6 @@ int read_config(char *fname)
 		}
 
 		fclose(fp);
-	}
-
-	/* Make sure hostname is set to something */
-	/* Make sure it is malloced */
-	if (hostname == NULL) {
-		if (gethostname(line, sizeof(line) - 1)) {
-			puts("Warning: setting hostname to localhost.\n"
-				 "This is probably not what you want.");
-			strcpy(line, "localhost");
-		}
-		hostname = must_strdup(line);
 	}
 
 	/* Default'em */

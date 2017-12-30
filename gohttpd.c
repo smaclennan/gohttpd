@@ -55,7 +55,6 @@ static int npoll;
 static uid_t root_uid;
 
 #define MAX_SERVER_STRING	48
-static char *server_str;
 
 #define HTML_INDEX_FILE	"index.html"
 
@@ -101,8 +100,6 @@ static void cleanup(void)
 	struct connection *conn;
 	int i;
 
-	free(server_str);
-
 	close(ufds[0].fd); /* accept socket */
 
 	/*
@@ -120,7 +117,6 @@ static void cleanup(void)
 
 	free(user);
 	free(root_dir);
-	free(hostname);
 	free(logfile);
 	free(pidfile);
 
@@ -174,8 +170,6 @@ int main(int argc, char *argv[])
 		       " Try reducing max-connections.");
 		exit(1);
 	}
-
-	server_str = must_strdup("Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n");
 
 	if (go_daemon) {
 		if (daemon(0, 0) == -1)
@@ -752,9 +746,9 @@ static int http_error1(struct connection *conn, int status, char *request)
 
 	sprintf(str,
 		"HTTP/1.0 %s\r\n"
-		"Server: %s"
+		"Server: %.*s"
 		"Content-Type: text/html\r\n",
-		title, server_str);
+		title, MAX_SERVER_STRING, SERVER_STR);
 
 	if (status == 301) {
 		/* we must add the *real* location */
@@ -809,7 +803,7 @@ static int http_build_response(struct connection *conn)
 	char str[1024], *p;
 
 	strcpy(str, "HTTP/1.1 200 OK\r\n");
-	strcat(str, server_str);
+	strcat(str, SERVER_STR);
 	/* SAM We do not support persistant connections */
 	strcat(str, "Connection: close\r\n");
 	p = str;
