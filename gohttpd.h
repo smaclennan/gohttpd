@@ -48,6 +48,12 @@
 #define POLL_TIMEOUT	 1	/* seconds */
 #define MAX_IDLE_TIME	60	/* seconds */
 
+/* If defined we allow directory listings */
+// #define ALLOW_DIR_LISTINGS
+
+/* If defined we support 301 errors */
+// #define ADD_301_SUPPORT
+
 #define HTTP_ROOT		"/var/www/htdocs"
 #define HTTP_CHROOT		"/var/www"
 #define HTTP_PIDFILE	"/var/run/gohttpd.pid"
@@ -81,7 +87,9 @@ struct connection {
 	char *referer;    /* combined log only */
 	char http_header[128];
 	char tmp_buf[256];
+#ifdef ADD_301_SUPPORT
 	char *errorstr;
+#endif
 };
 
 /* exported from log.c */

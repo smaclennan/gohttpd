@@ -381,10 +381,12 @@ static void close_connection(struct connection *conn, int status)
 	conn->http = 0;
 	conn->referer = NULL;
 	conn->user_agent = NULL;
+#ifdef ADD_301_SUPPORT
 	if (conn->errorstr) {
 		free(conn->errorstr);
 		conn->errorstr = NULL;
 	}
+#endif
 
 	conn->status = 200;
 
@@ -685,6 +687,7 @@ static char *msg_500 =
 	"An internal server error occurred. Try again later.";
 
 
+#ifdef ADD_301_SUPPORT
 /* This is a very specialized build_response just for errors.
    The request field is for the 301 errors.
 */
@@ -743,6 +746,7 @@ static int http_error301(struct connection *conn, char *request)
 
 	return 0;
 }
+#endif
 
 /* For all but 301 errors */
 int http_error(struct connection *conn, int status)
@@ -811,7 +815,6 @@ static int http_build_response(struct connection *conn)
 {
 	conn->status = 200;
 
-	/* max about 91 */
 	return snprintf(conn->http_header, sizeof(conn->http_header),
 					"HTTP/1.1 200 OK\r\n"
 					SERVER_STR
@@ -857,6 +860,7 @@ static int do_file(struct connection *conn, int fd)
 	return 0;
 }
 
+#ifdef ALLOW_DIR_LISTINGS
 /* SAM HACK FOR NOW */
 static char dirbuf[16 * 1024];
 
@@ -938,6 +942,7 @@ static int do_dir(struct connection *conn, int fd, const char *dirname)
 
 	return 0;
 }
+#endif
 
 static int isdir(char *name)
 {
@@ -951,7 +956,7 @@ static int isdir(char *name)
 int http_get(struct connection *conn)
 {
 	char *e;
-	int fd, rc, isfile = 0;
+	int fd, rc;
 	char *request = conn->cmd;
 	char dirname[MAX_LINE + 20];
 
@@ -984,42 +989,40 @@ int http_get(struct connection *conn)
 		snprintf(dirname, sizeof(dirname) - 20, "%s", request);
 		if (isdir(dirname)) {
 			char *p = dirname + strlen(dirname);
+#ifdef ADD_301_SUPPORT
 			if (*(p - 1) != '/') {
 				/* We must send back a 301
 				 * response or relative
 				 * URLs will not work */
 				return http_error301(conn, request);
 			}
+#endif
 			strcpy(p, HTML_INDEX_FILE);
-			if ((fd = open(dirname, O_RDONLY)) >= 0)
-				isfile = 1;
-			else {
+#ifdef ALLOW_DIR_LISTINGS
+			if ((fd = open(dirname, O_RDONLY)) < 0) {
 				*p = '\0';
 				fd = open(dirname, O_RDONLY);
+				if (fd >= 0) {
+					rc = do_dir(conn, fd, dirname);
+					if (rc == 0)
+						set_writeable(conn);
+					return rc;
+				}
 			}
-		} else {
+#else
 			fd = open(dirname, O_RDONLY);
-			isfile = 1;
-		}
-	} else {
-		if ((fd = open(HTML_INDEX_FILE, O_RDONLY)) >= 0)
-			isfile = 1;
-		else {
-			strcpy(dirname, "/");
-			fd = open(".", O_RDONLY);
-		}
-	}
+#endif
+		} else
+			fd = open(dirname, O_RDONLY);
+	} else /* require an index file at the top level */
+		fd = open(HTML_INDEX_FILE, O_RDONLY);
 
 	if (fd < 0) {
 		syslog(LOG_WARNING, "%s: %m", request);
 		return http_error(conn, 404);
 	}
 
-	if (isfile)
-		rc = do_file(conn, fd);
-	else
-		rc = do_dir(conn, fd, dirname);
-
+	rc = do_file(conn, fd);
 	if (rc == 0)
 		set_writeable(conn);
 
