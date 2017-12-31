@@ -65,8 +65,10 @@ static int read_request(struct connection *conn);
 static int write_request(struct connection *conn);
 static int gohttpd_stats(struct connection *conn);
 static void check_old_connections(void);
+#ifndef USE_SENDFILE
 static unsigned char *mmap_get(struct connection *conn, int fd);
 static void mmap_release(struct connection *conn);
+#endif
 static int http_get(struct connection *conn);
 static int http_error(struct connection *conn, int status);
 static void close_connection(struct connection *conn, int status);
@@ -321,13 +323,6 @@ static void close_connection(struct connection *conn, int status)
 
 	--n_connections;
 
-#ifdef USE_SENDFILE
-	if (conn->in_fd >= 0) {
-		close(conn->in_fd);
-		conn->in_fd = -1;
-	}
-#endif
-
 	if (conn->cmd) {
 		/* Make sure we have a clean cmd */
 		char *p;
@@ -350,15 +345,24 @@ static void close_connection(struct connection *conn, int status)
 		conn->cmd = NULL;
 	}
 
+#ifdef USE_SENDFILE
+	if (conn->in_fd >= 0) {
+		close(conn->in_fd);
+		conn->in_fd = -1;
+		conn->in_offset = 0;
+	}
+#else
 	if (conn->buf) {
-		if (conn->mapped)
+		if (conn->mapped) {
 			mmap_release(conn);
-		else
+			conn->mapped = 0;
+		} else
 			free(conn->buf);
 		conn->buf = NULL;
 	}
+#endif
 
-	conn->len = conn->offset = conn->mapped = 0;
+	conn->len = conn->offset = 0;
 
 	if (SOCKET(conn) >= 0) {
 		close(SOCKET(conn));
@@ -427,7 +431,9 @@ static int new_connection(int csock)
 
 		conn->offset = 0;
 		conn->len    = 0;
+#ifndef USE_SENDFILE
 		conn->mapped = 0;
+#endif
 		time(&conn->access);
 
 		if (!conn->cmd) {
@@ -518,10 +524,6 @@ static int write_request(struct connection *conn)
 			n = writev(SOCKET(conn), conn->iovs, conn->n_iovs);
 		while (n < 0 && errno == EINTR);
 
-		printf("writev %d:%ld + %ld %d\n",
-			   conn->n_iovs, conn->iovs[0].iov_len,
-			   conn->iovs[1].iov_len, n); // SAM DBG
-
 		if (n < 0) {
 			if (errno == EAGAIN)
 				return 0;
@@ -554,25 +556,20 @@ static int write_request(struct connection *conn)
 	if (conn->in_fd >= 0) {
 		n = sendfile(SOCKET(conn), conn->in_fd, &conn->in_offset, conn->len);
 		if (n > 0) {
-			printf("sendfile %d/%d offset %ld\n", n, conn->len, conn->in_offset); // SAM DBG
-			conn->len -= n; /* SAM needed? */
+			conn->len -= n;
 			if (conn->len > 0)
 				return 0;
 		} else if (n < 0) {
 			if (errno == EAGAIN)
 				return 0;
 
-			perror("sendfile"); // SAM DBG
 			close_connection(conn, 408);
 			return 1;
 		}
-		else printf("sendfile EOF 0\n"); // SAM DBG
 	}
 #endif
 
 	close_connection(conn, conn->status);
-
-	printf("sendfile EOF normal\n"); // SAM DBG
 
 	return 0;
 }
@@ -835,6 +832,8 @@ static int http_build_response(struct connection *conn)
 
 static int do_file(struct connection *conn, int fd)
 {
+	conn->len = lseek(fd, 0, SEEK_END); /* build_responset() needs this set */
+
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = http_build_response(conn);
 
@@ -847,8 +846,6 @@ static int do_file(struct connection *conn, int fd)
 
 		return 0;
 	}
-
-	conn->len = lseek(fd, 0, SEEK_END);
 
 #ifdef USE_SENDFILE
 	conn->n_iovs = 1;
@@ -1044,6 +1041,7 @@ int http_get(struct connection *conn)
 	return rc;
 }
 
+#ifndef USE_SENDFILE
 static unsigned char *mmap_get(struct connection *conn, int fd)
 {
 	unsigned char *mapped;
@@ -1069,3 +1067,4 @@ static void mmap_release(struct connection *conn)
 		syslog(LOG_ERR, "munmap %p %d", conn->buf, conn->mapped);
 	}
 }
+#endif

@@ -27,7 +27,7 @@
 #include <sys/uio.h>
 #include <sys/poll.h>
 
-// #define USE_SENDFILE
+#define USE_SENDFILE
 
 #define GOHTTPD_STR		"Apache"
 #define GOHTTPD_VERSION "0.1"
@@ -73,15 +73,20 @@ struct connection {
 	char *cmd;
 	off_t offset;
 	unsigned len;
-	unsigned char *buf;
-	unsigned mapped;
 	int   status;
+#ifdef ALLOW_DIR_LISTINGS
 	struct iovec iovs[4];
+#else
+	struct iovec iovs[2];
+#endif
 	int n_iovs;
 
 #ifdef USE_SENDFILE
 	int in_fd;
 	off_t in_offset;
+#else
+	unsigned char *buf;
+	unsigned mapped;
 #endif
 
 	time_t access;
