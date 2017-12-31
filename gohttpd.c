@@ -989,10 +989,8 @@ int http_get(struct connection *conn)
 	} else /* require an index file at the top level */
 		fd = open(HTML_INDEX_FILE, O_RDONLY);
 
-	if (fd < 0) {
-		syslog(LOG_WARNING, "%s: %m", request);
+	if (fd < 0)
 		return http_error(conn, 404);
-	}
 
 	rc = do_file(conn, fd);
 	if (rc == 0)
