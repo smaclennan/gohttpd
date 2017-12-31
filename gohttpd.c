@@ -149,27 +149,21 @@ int main(int argc, char *argv[])
 			++verbose;
 			break;
 		default:
-			printf("usage: %s [-dpv] [-m max_conns] [-c config]\n",
-			       *argv);
-			exit(1);
+			fatal_error("usage: %s [-dpv] [-m max_conns] [-c config]\n", *argv);
 		}
 
-	if (read_config(config))
-		exit(1);
+	read_config(config);
 
 	if (max_conns == 0)
 		max_conns = 25;
 
 	conns = calloc(max_conns, sizeof(struct connection));
-	if (!conns) {
-		syslog(LOG_CRIT, "Not enough memory."
-		       " Try reducing max-connections.");
-		exit(1);
-	}
+	if (!conns)
+		fatal_error("Not enough memory. Try reducing max-connections.");
 
 	if (go_daemon) {
 		if (daemon(0, 0) == -1)
-			syslog(LOG_CRIT, "Could not become daemon-process!");
+			fatal_error("Could not become daemon-process!");
 		else
 			gohttpd(prog); /* never returns */
 	} else
@@ -185,11 +179,8 @@ static void setup_privs(void)
 
 	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
 		struct passwd *pwd = getpwnam(user);
-		if (!pwd) {
-			syslog(LOG_ERR, "No such user: `%s'.", user);
-			closelog();
-			exit(1);
-		}
+		if (!pwd)
+			fatal_error("No such user: `%s'.", user);
 		if (uid == (uid_t)-1)
 			uid = pwd->pw_uid;
 		if (gid == (uid_t)-1)
@@ -276,18 +267,14 @@ static void gohttpd(char *name)
 	/* Create *before* chroot */
 	create_pidfile(pidfile);
 
-	if (chdir(root_dir)) {
-		perror(root_dir);
-		exit(1);
-	}
+	if (chdir(root_dir))
+		fatal_error("%s: %m", root_dir);
 
 	/* Must setup privileges before chroot */
 	setup_privs();
 
-	if (do_chroot && chroot(chroot_dir)) {
-		perror("chroot");
-		exit(1);
-	}
+	if (do_chroot && chroot(chroot_dir))
+		fatal_error("chroot: %m");
 
 	signal(SIGHUP,  sighandler);
 	signal(SIGTERM, sighandler);
@@ -297,10 +284,8 @@ static void gohttpd(char *name)
 
 	/* connection socket */
 	csock = listen_socket(port);
-	if (csock < 0) {
-		syslog(LOG_ERR, "Unable to create socket: %m");
-		exit(1);
-	}
+	if (csock < 0)
+		fatal_error("Unable to create socket: %m");
 
 	seteuid(uid);
 
@@ -311,11 +296,8 @@ static void gohttpd(char *name)
 	}
 
 	ufds = calloc(max_conns + 1, sizeof(struct pollfd));
-	if (!ufds) {
-		syslog(LOG_CRIT, "Not enough memory."
-		       " Try reducing max-connections.");
-		exit(1);
-	}
+	if (!ufds)
+		fatal_error("Not enough memory. Try reducing max-connections.");
 
 	for (i = 0; i < max_conns; ++i) {
 		conns[i].ufd = &ufds[i + 1];
@@ -585,29 +567,19 @@ static void create_pidfile(char *fname)
 		fclose(fp);
 
 		if (n == 1) {
-			if (kill(pid, 0) == 0) {
-				syslog(LOG_ERR,
-				       "gohttpd already running (pid = %d)",
-				       pid);
-				exit(1);
-			}
-		} else {
-			syslog(LOG_ERR, "Unable to read %s", fname);
-			exit(1);
-		}
-	} else if (errno != ENOENT) {
-		syslog(LOG_ERR, "Open %s: %m", fname);
-		exit(1);
-	}
+			if (kill(pid, 0) == 0)
+				fatal_error("gohttpd already running (pid = %d)", pid);
+		} else
+			fatal_error("Unable to read %s", fname);
+	} else if (errno != ENOENT)
+		fatal_error("Open %s: %m", fname);
 
 	if ((fp = fopen(fname, "w"))) {
 		pid = getpid();
 		fprintf(fp, "%d\n", pid);
 		fclose(fp);
-	} else  if (errno != EACCES) {
-		syslog(LOG_ERR, "Create %s: %m", fname);
-		exit(1);
-	}
+	} else  if (errno != EACCES)
+		fatal_error("Create %s: %m", fname);
 }
 
 #define SECONDS_IN_A_MINUTE	(60)

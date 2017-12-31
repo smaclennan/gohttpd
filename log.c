@@ -57,11 +57,8 @@ static void log_reopen(void)
 int log_open(char *logname)
 {
 	log_fp = fopen(logname, "a");
-	if (log_fp == NULL) {
-		syslog(LOG_ERR, "Unable to open %s: %m", logname);
-		perror(logname);
-		exit(1);
-	}
+	if (log_fp == NULL)
+		fatal_error("Unable to open %s: %m", logname);
 
 	if (fchown(fileno(log_fp), uid, gid))
 		perror("chown log file");

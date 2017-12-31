@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -43,14 +44,23 @@ gid_t gid  = -1;
 int   max_conns     = 25;
 int   do_chroot     = -1;
 
+void fatal_error(const char *msg, ...)
+{
+	va_list ap;
+
+	va_start(ap, msg);
+	vsyslog(LOG_ERR, msg, ap);
+	va_end(ap);
+	puts(msg);
+	exit(1);
+}
+
 /* If we are already out of memory, we are in real trouble */
 static char *must_strdup(char *str)
 {
 	char *new = strdup(str);
-	if (!new) {
-		syslog(LOG_ERR, "read_config: out of memory");
-		exit(1);
-	}
+	if (!new)
+		fatal_error("read_config: out of memory");
 	return new;
 }
 
@@ -63,7 +73,7 @@ static void must_strtol(char *str, int *value)
 		*value = (int)n;
 }
 
-int read_config(char *fname)
+void read_config(char *fname)
 {
 	FILE *fp;
 	char line[100];
@@ -82,12 +92,10 @@ int read_config(char *fname)
 
 			char *key = strtok(line, "=");
 			char *val = strtok(NULL, "\r\n");
-			if (!key || !val) {
-				printf("Bad line '%s'\n", line);
-				continue;
-			}
+			if (!key || !val)
+				fatal_error("Bad line '%s'", line);
 
-			if (strcmp(key, "root") == 0) {
+			if (strcmp(key, "root") == 0 || strcmp(key, "root-dir") == 0) {
 				if (root_dir)
 					free(root_dir);
 				root_dir = must_strdup(val);
@@ -118,14 +126,12 @@ int read_config(char *fname)
 			else if (strcmp(key, "chroot") == 0)
 				must_strtol(val, &do_chroot);
 			else
-				printf("Unknown config '%s'\n", key);
+				fatal_error("Unknown config '%s'", key);
 		}
 
 		fclose(fp);
-	} else if (errno != ENOENT) {
-		perror(fname);
-		exit(1);
-	}
+	} else if (errno != ENOENT)
+		fatal_error("%s: %m", fname);
 
 	if (do_chroot == -1)
 		do_chroot = getuid() == 0;
@@ -140,18 +146,11 @@ int read_config(char *fname)
 	if (pidfile == NULL)
 		pidfile  = must_strdup(HTTP_PIDFILE);
 
-	if (strlen(root_dir) >= PATH_MAX) {
-		printf("Root directory too long\n");
-		exit(1);
-	}
+	if (strlen(root_dir) >= PATH_MAX)
+		fatal_error("Root directory too long");
 
 	if (do_chroot)
 		/* root_dir must be inside chroot_dir */
-		if (strncmp(root_dir, chroot_dir, strlen(chroot_dir))) {
-			syslog(LOG_ERR, "%s not inside chroot %s", root_dir, chroot_dir);
-			printf("%s not inside chroot %s\n", root_dir, chroot_dir);
-			exit(1);
-		}
-
-	return 0;
+		if (strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
+			fatal_error("%s not inside chroot %s", root_dir, chroot_dir);
 }

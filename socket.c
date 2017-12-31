@@ -112,17 +112,11 @@ void alloc_sock_addr(struct connection *conn)
 {
 #ifdef IPV4_ONLY
 	conn->sock_addr = malloc(sizeof(struct sockaddr_in));
-	if (!conn->sock_addr) {
-		printf("Out of memory\n");
-		exit(1);
-	}
 #else
 	conn->sock_addr = malloc(sizeof(struct sockaddr_storage));
-	if (!conn->sock_addr) {
-		printf("Out of memory\n");
-		exit(1);
-	}
 #endif
+	if (!conn->sock_addr)
+		fatal_error("Out of memory");
 }
 
 

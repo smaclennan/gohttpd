@@ -116,7 +116,8 @@ extern gid_t gid;
 extern int   max_conns;
 extern int   do_chroot;
 
-int read_config(char *fname);
+void read_config(char *fname);
+void fatal_error(const char *msg, ...);
 
 #define SOCKET(c)	((c)->ufd->fd)
 
