@@ -32,6 +32,7 @@
 #include <grp.h>
 #include <dirent.h>
 #include <sys/mman.h>
+#include <sys/sendfile.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -320,8 +321,15 @@ static void close_connection(struct connection *conn, int status)
 
 	--n_connections;
 
+#ifdef USE_SENDFILE
+	if (conn->in_fd >= 0) {
+		close(conn->in_fd);
+		conn->in_fd = -1;
+	}
+#endif
+
 	if (conn->cmd) {
-		/* Make we have a clean cmd */
+		/* Make sure we have a clean cmd */
 		char *p;
 
 		for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
@@ -502,38 +510,69 @@ static int read_request(struct connection *conn)
 static int write_request(struct connection *conn)
 {
 	int n, i;
-	struct iovec *iov;
 
-	do
-		n = writev(SOCKET(conn), conn->iovs, conn->n_iovs);
-	while (n < 0 && errno == EINTR);
+	if (conn->n_iovs) {
+		struct iovec *iov;
 
-	if (n < 0) {
-		if (errno == EAGAIN)
-			return 0;
+		do
+			n = writev(SOCKET(conn), conn->iovs, conn->n_iovs);
+		while (n < 0 && errno == EINTR);
 
-		syslog(LOG_ERR, "writev: %m");
-		close_connection(conn, 408);
-		return 1;
-	}
-	if (n == 0) {
-		syslog(LOG_ERR, "writev unexpected EOF");
-		close_connection(conn, 408);
-		return 1;
-	}
+		printf("writev %d:%ld + %ld %d\n",
+			   conn->n_iovs, conn->iovs[0].iov_len,
+			   conn->iovs[1].iov_len, n); // SAM DBG
 
-	for (iov = conn->iovs, i = 0; i < conn->n_iovs; ++i, ++iov)
-		if (n >= iov->iov_len) {
-			n -= iov->iov_len;
-			iov->iov_len = 0;
-		} else {
-			iov->iov_len -= n;
-			iov->iov_base += n;
-			time(&conn->access);
-			return 0;
+		if (n < 0) {
+			if (errno == EAGAIN)
+				return 0;
+
+			syslog(LOG_ERR, "writev: %m");
+			close_connection(conn, 408);
+			return 1;
+		}
+		if (n == 0) {
+			syslog(LOG_ERR, "writev unexpected EOF");
+			close_connection(conn, 408);
+			return 1;
 		}
 
+		for (iov = conn->iovs, i = 0; i < conn->n_iovs; ++i, ++iov)
+			if (n >= iov->iov_len) {
+				n -= iov->iov_len;
+				iov->iov_len = 0;
+			} else {
+				iov->iov_len -= n;
+				iov->iov_base += n;
+				time(&conn->access);
+				return 0;
+			}
+	}
+
+#ifdef USE_SENDFILE
+	conn->n_iovs = 0;
+
+	if (conn->in_fd >= 0) {
+		n = sendfile(SOCKET(conn), conn->in_fd, &conn->in_offset, conn->len);
+		if (n > 0) {
+			printf("sendfile %d/%d offset %ld\n", n, conn->len, conn->in_offset); // SAM DBG
+			conn->len -= n; /* SAM needed? */
+			if (conn->len > 0)
+				return 0;
+		} else if (n < 0) {
+			if (errno == EAGAIN)
+				return 0;
+
+			perror("sendfile"); // SAM DBG
+			close_connection(conn, 408);
+			return 1;
+		}
+		else printf("sendfile EOF 0\n"); // SAM DBG
+	}
+#endif
+
 	close_connection(conn, conn->status);
+
+	printf("sendfile EOF normal\n"); // SAM DBG
 
 	return 0;
 }
@@ -796,8 +835,6 @@ static int http_build_response(struct connection *conn)
 
 static int do_file(struct connection *conn, int fd)
 {
-	conn->len = lseek(fd, 0, SEEK_END);
-
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = http_build_response(conn);
 
@@ -811,6 +848,13 @@ static int do_file(struct connection *conn, int fd)
 		return 0;
 	}
 
+	conn->len = lseek(fd, 0, SEEK_END);
+
+#ifdef USE_SENDFILE
+	conn->n_iovs = 1;
+	conn->in_fd = fd;
+	conn->in_offset = 0;
+#else
 	conn->buf = mmap_get(conn, fd);
 
 	close(fd); /* done with this */
@@ -828,6 +872,7 @@ static int do_file(struct connection *conn, int fd)
 
 	conn->len = conn->iovs[0].iov_len + conn->iovs[1].iov_len;
 	conn->n_iovs = 2;
+#endif
 
 	return 0;
 }
