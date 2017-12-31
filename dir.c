@@ -63,7 +63,7 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 
 	if (strcmp(dirname, "/"))
 		n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-				  "<a href=\"../\">Parent Directory/</a><br>\n");
+			      "<a href=\"../\">Parent Directory/</a><br>\n");
 
 	close(fd);
 
@@ -89,12 +89,12 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 			if (stat(path, &sbuf) == 0) {
 				if (S_ISDIR(sbuf.st_mode))
 					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-							  "<a href=\"%s/\">%s/</a><br>\n",
-							  ent->d_name, ent->d_name);
+						      "<a href=\"%s/\">%s/</a><br>\n",
+						      ent->d_name, ent->d_name);
 				else
 					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-							  "<a href=\"%s\">%s</a><br>\n",
-							  ent->d_name, ent->d_name);
+						      "<a href=\"%s\">%s</a><br>\n",
+						      ent->d_name, ent->d_name);
 			}
 			else perror(path); // SAM DBG
 		}
@@ -117,11 +117,13 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 	conn->status = 200;
 
 	conn->iovs[0].iov_base = conn->http_header;
-	conn->iovs[0].iov_len  = snprintf(conn->http_header, sizeof(conn->http_header),
-									  "HTTP/1.1 200 OK\r\n"
-									  SERVER_STR
-									  "Connection: close\r\n"
-									  "Content-Length: %d\r\n\r\n", conn->len);
+	conn->iovs[0].iov_len  = snprintf(conn->http_header,
+					  sizeof(conn->http_header),
+					  "HTTP/1.1 200 OK\r\n"
+					  SERVER_STR
+					  "Connection: close\r\n"
+					  "Content-Length: %d\r\n\r\n",
+					  conn->len);
 
 	conn->len += conn->iovs[0].iov_len;
 
@@ -130,3 +132,11 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 	return 0;
 }
 #endif
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */

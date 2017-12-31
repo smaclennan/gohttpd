@@ -1,6 +1,5 @@
-/*
- * config.c - read the config file
- * Copyright (C) 2015  Sean MacLennan <seanm@seanm.ca>
+/* config.c - read the config file
+ * Copyright (C) 2002-2018  Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,6 +58,7 @@ void fatal_error(const char *msg, ...)
 static char *must_strdup(char *str)
 {
 	char *new = strdup(str);
+
 	if (!new)
 		fatal_error("read_config: out of memory");
 	return new;
@@ -69,6 +69,7 @@ static void must_strtol(char *str, int *value)
 {
 	char *end;
 	long n = strtol(str, &end, 0);
+
 	if (str != end)
 		*value = (int)n;
 }
@@ -92,10 +93,12 @@ void read_config(char *fname)
 
 			char *key = strtok(line, "=");
 			char *val = strtok(NULL, "\r\n");
+
 			if (!key || !val)
 				fatal_error("Bad line '%s'", line);
 
-			if (strcmp(key, "root") == 0 || strcmp(key, "root-dir") == 0) {
+			if (strcmp(key, "root") == 0 ||
+			    strcmp(key, "root-dir") == 0) {
 				if (root_dir)
 					free(root_dir);
 				root_dir = must_strdup(val);
@@ -142,15 +145,23 @@ void read_config(char *fname)
 	if (chroot_dir == NULL)
 		chroot_dir = must_strdup(HTTP_CHROOT);
 	if (logfile == NULL)
-		logfile  = must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
+		logfile  =
+			must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
 	if (pidfile == NULL)
 		pidfile  = must_strdup(HTTP_PIDFILE);
 
 	if (strlen(root_dir) >= PATH_MAX)
 		fatal_error("Root directory too long");
 
-	if (do_chroot)
-		/* root_dir must be inside chroot_dir */
-		if (strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
-			fatal_error("%s not inside chroot %s", root_dir, chroot_dir);
+	/* root_dir must be inside chroot_dir */
+	if (do_chroot && strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
+		fatal_error("%s not inside chroot %s", root_dir, chroot_dir);
 }
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */

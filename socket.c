@@ -1,6 +1,5 @@
-/*
- * socket.c - socket utilities
- * Copyright (C) 2015  Sean MacLennan <seanm@seanm.ca>
+/* socket.c - socket utilities
+ * Copyright (C) 2002-2018  Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,9 +16,7 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-/*
- * All knowledge of sockets should be isolated to this file.
- */
+/* All knowledge of sockets should be isolated to this file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,8 +70,8 @@ int listen_socket(int port)
 
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
 		       (char *)&optval, sizeof(optval)) == -1 ||
-	   bind(s, (struct sockaddr *)&sock_name, sizeof(sock_name)) == -1 ||
-	   listen(s, HTTP_BACKLOG) == -1) {
+	    bind(s, (struct sockaddr *)&sock_name, sizeof(sock_name)) == -1 ||
+	    listen(s, HTTP_BACKLOG) == -1) {
 		close(s);
 		return -1;
 	}
@@ -92,9 +89,9 @@ int accept_socket(int sock, struct connection *conn)
 {
 	int new, flags;
 #ifdef IPV4_ONLY
-	unsigned addrlen = sizeof(struct sockaddr_in);
+	unsigned int addrlen = sizeof(struct sockaddr_in);
 #else
-	unsigned addrlen = sizeof(struct sockaddr_storage);
+	unsigned int addrlen = sizeof(struct sockaddr_storage);
 #endif
 	new = accept(sock, conn->sock_addr, &addrlen);
 	if (new < 0)
@@ -139,10 +136,20 @@ const char *ntoa(struct connection *conn)
 {
 #ifdef IPV4_ONLY
 	struct sockaddr_in *sin = conn->sock_addr;
+
 	return inet_ntoa(sin->sin_addr);
 #else
 	static char a[64];
 	struct sockaddr_storage *sin = conn->sock_addr;
+
 	return inet_ntop(sin->ss_family, sin, a, sizeof(a));
 #endif
 }
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */

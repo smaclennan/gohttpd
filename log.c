@@ -1,6 +1,5 @@
-/*
- * log.c - log file output
- * Copyright (C) 2015 Sean MacLennan <seanm@seanm.ca>
+/* log.c - log file output
+ * Copyright (C) 2002-2018 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,7 +16,6 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,8 +27,6 @@
 
 #include "gohttpd.h"
 
-
-/* #define LOG_HIT_DBG 1 */
 
 static FILE *log_fp;
 static char *log_name;
@@ -79,7 +75,7 @@ static char *trim_str(char *str, int skip)
 	str += skip;
 
 	while (isspace(*str))
-			++str;
+		++str;
 	p = strpbrk(str, "\r\n");
 	if (p)
 		*p = '\0';
@@ -90,7 +86,7 @@ static char *trim_str(char *str, int skip)
 }
 
 static void add_combined_log(struct connection *conn,
-			     char *common, char *request, unsigned status)
+			     char *common, char *request, unsigned int status)
 {	/* This is 500 + hostname chars max */
 	char *referer, *agent;
 	int n;
@@ -100,19 +96,14 @@ static void add_combined_log(struct connection *conn,
 
 	do {
 		n = fprintf(log_fp,
-			    "%s /%.200s\" %u %u \"%.100s\" "
-			    "\"%.100s\"\n",
+			    "%s /%.200s\" %u %u \"%.100s\" \"%.100s\"\n",
 			    common, request, status, conn->len,
 			    referer, agent);
 	} while (n < 0 && errno == EINTR);
 }
 
-#ifdef LOG_HIT_DBG
-static unsigned logcnt;
-#endif
-
 /* Common log file format */
-void log_hit(struct connection *conn, unsigned status)
+void log_hit(struct connection *conn, unsigned int status)
 {
 	char common[100], *p = common;
 	time_t now;
@@ -134,14 +125,7 @@ void log_hit(struct connection *conn, unsigned status)
 	n = snprintf(p, len, "%s", ntoa(conn));
 	p += n;
 	len -= n;
-#ifdef LOG_HIT_DBG
-	n = snprintf(p, len, " - %u ", logcnt++);
-	p += n;
-	len -= n;
-	n = strftime(p, len, "[%d/%b/%Y:%T %z] \"", t);
-#else
 	n = strftime(p, len, " - - [%d/%b/%Y:%T %z] \"", t);
-#endif
 	p += n;
 	len -= n;
 	snprintf(p, len, "%s", conn->http == HTTP_HEAD ? "HEAD" : "GET");
@@ -169,3 +153,11 @@ void log_close(void)
 		log_fp = NULL;
 	}
 }
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */

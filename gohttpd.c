@@ -53,8 +53,6 @@ static int npoll;
 
 #define HTML_INDEX_FILE	"index.html"
 
-static unsigned int bad_munmaps;
-
 /* forward references */
 static void gohttpd(char *name);
 static void create_pidfile(char *fname);
@@ -555,7 +553,8 @@ static int write_request(struct connection *conn)
 	conn->n_iovs = 0;
 
 	if (conn->in_fd >= 0) {
-		n = sendfile(SOCKET(conn), conn->in_fd, &conn->in_offset, conn->len);
+		n = sendfile(SOCKET(conn), conn->in_fd,
+			     &conn->in_offset, conn->len);
 		if (n > 0) {
 			set_cork(SOCKET(conn), 0);
 			conn->len -= n;
@@ -606,7 +605,8 @@ static void create_pidfile(char *fname)
 
 		if (n == 1) {
 			if (kill(pid, 0) == 0)
-				fatal_error("gohttpd already running (pid = %d)", pid);
+				fatal_error("gohttpd already running (pid %d)",
+					    pid);
 		} else
 			fatal_error("Unable to read %s", fname);
 	} else if (errno != ENOENT)
@@ -644,19 +644,15 @@ static char *uptime(char *str, int len)
 static int gohttpd_stats(struct connection *conn)
 {
 	char buf[200], up[12];
-	int n;
 
-	n = snprintf(buf, sizeof(buf),
-		     "gohttpd " GOHTTPD_VERSION " %12s\r\n"
-		     "Requests:     %10u\r\n"
-		     "Max parallel: %10u\r\n"
-		     "Max length:   %10u\r\n",
-		     uptime(up, sizeof(up)),
-		     n_requests,
-		     max_requests, max_length);
-
-	if (bad_munmaps)
-		snprintf(buf + n, sizeof(buf) - n, "BAD UNMAPS:   %10u\r\n", bad_munmaps);
+	snprintf(buf, sizeof(buf),
+		 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+		 "Requests:     %10u\r\n"
+		 "Max parallel: %10u\r\n"
+		 "Max length:   %10u\r\n",
+		 uptime(up, sizeof(up)),
+		 n_requests,
+		 max_requests, max_length);
 
 	while (write(SOCKET(conn), buf, strlen(buf)) < 0 && errno == EINTR)
 		;
@@ -832,7 +828,7 @@ static int http_build_response(struct connection *conn)
 
 static int do_file(struct connection *conn, int fd)
 {
-	conn->len = lseek(fd, 0, SEEK_END); /* build_response() needs this set */
+	conn->len = lseek(fd, 0, SEEK_END); /* build_response needs this set */
 
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = http_build_response(conn);
@@ -981,10 +977,8 @@ static unsigned char *mmap_get(struct connection *conn, int fd)
 
 static void mmap_release(struct connection *conn)
 {
-	if (munmap(conn->buf, conn->mapped)) {
-		++bad_munmaps;
+	if (munmap(conn->buf, conn->mapped))
 		syslog(LOG_ERR, "munmap %p %d", conn->buf, conn->mapped);
-	}
 }
 #endif
 

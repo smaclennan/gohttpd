@@ -1,6 +1,5 @@
-/*
- * gohttpd.h - defines for the go httpd
- * Copyright (C) 2015 Sean MacLennan <seanm@seanm.ca>
+/* gohttpd.h - defines for the go httpd
+ * Copyright (C) 2002-2018 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -72,7 +71,7 @@ struct connection {
 	void *sock_addr;
 	char *cmd;
 	off_t offset;
-	unsigned len;
+	unsigned int len;
 	int   status;
 #ifdef ALLOW_DIR_LISTINGS
 	struct iovec iovs[4];
@@ -86,7 +85,7 @@ struct connection {
 	off_t in_offset;
 #else
 	unsigned char *buf;
-	unsigned mapped;
+	unsigned int mapped;
 #endif
 
 	time_t access;
@@ -106,7 +105,7 @@ struct connection {
 
 /* exported from log.c */
 int  log_open(char *log_name);
-void log_hit(struct connection *conn, unsigned status);
+void log_hit(struct connection *conn, unsigned int status);
 void log_close(void);
 
 /* exported from socket.c */
@@ -144,9 +143,14 @@ int do_dir(struct connection *conn, int fd, const char *dirname);
 			npoll = (c)->conn_n + 2;	\
 	} while (0)
 
-#define set_writeable(c)			\
-	do {					\
-		(c)->ufd->events = POLLOUT;	\
-	} while (0)
+#define set_writeable(c) ((c)->ufd->events = POLLOUT)
 
 #endif /* _GOHTTPD_H_ */
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */
