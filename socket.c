@@ -25,6 +25,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -61,6 +62,11 @@ int listen_socket(int port)
 	sock_name.sin6_port = htons(port);
 
 	s = socket(AF_INET6, SOCK_STREAM, 0);
+	if (s == -1 && errno == EAFNOSUPPORT) {
+		/* fall back to ipv4 */
+		sock_name.sin6_family = AF_INET;
+		s = socket(AF_INET, SOCK_STREAM, 0);
+	}
 #endif
 	if (s == -1)
 		return -1;
