@@ -42,9 +42,9 @@
 static int verbose;
 
 /* Stats */
-static unsigned max_requests;
-static unsigned max_length;
-static unsigned n_requests;
+static unsigned int max_requests;
+static unsigned int max_length;
+static unsigned int n_requests;
 static int      n_connections; /* yes signed, I want to know if it goes -ve */
 static time_t   started;
 
@@ -55,7 +55,7 @@ static int npoll;
 
 #define HTML_INDEX_FILE	"index.html"
 
-static unsigned bad_munmaps;
+static unsigned int bad_munmaps;
 
 /* forward references */
 static void gohttpd(char *name);
@@ -86,7 +86,8 @@ static void sighandler(int signum)
 		exit(0);
 	case SIGPIPE:
 		/* We get a SIGPIPE if the client closes the
-		 * connection on us. */
+		 * connection on us.
+		 */
 		break;
 	default:
 		syslog(LOG_WARNING, "Got an unexpected %d signal\n", signum);
@@ -178,10 +179,12 @@ int main(int argc, char *argv[])
 static void setup_privs(void)
 {
 	/* If you are non-root you cannot set privileges */
-	if (getuid()) return;
+	if (getuid())
+		return;
 
 	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
 		struct passwd *pwd = getpwnam(user);
+
 		if (!pwd)
 			fatal_error("No such user: `%s'.", user);
 		if (uid == (uid_t)-1)
@@ -611,7 +614,8 @@ static void create_pidfile(char *fname)
 	} else if (errno != ENOENT)
 		fatal_error("Open %s: %m", fname);
 
-	if ((fp = fopen(fname, "w"))) {
+	fp = fopen(fname, "w");
+	if (fp) {
 		pid = getpid();
 		fprintf(fp, "%d\n", pid);
 		fclose(fp);
@@ -697,9 +701,7 @@ static char *msg_500 =
 
 
 #ifdef ADD_301_SUPPORT
-/* This is a very specialized build_response just for errors.
-   The request field is for the 301 errors.
-*/
+/* This is a very specialized build_response just for 301 errors. */
 static int http_error301(struct connection *conn, char *request)
 {
 	char str[MAX_LINE + MAX_LINE + MAX_SERVER_STRING + 512];
@@ -833,7 +835,7 @@ static int http_build_response(struct connection *conn)
 
 static int do_file(struct connection *conn, int fd)
 {
-	conn->len = lseek(fd, 0, SEEK_END); /* build_responset() needs this set */
+	conn->len = lseek(fd, 0, SEEK_END); /* build_response() needs this set */
 
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = http_build_response(conn);
@@ -1009,13 +1011,15 @@ int http_get(struct connection *conn)
 			if (*(p - 1) != '/') {
 				/* We must send back a 301
 				 * response or relative
-				 * URLs will not work */
+				 * URLs will not work
+				 */
 				return http_error301(conn, request);
 			}
 #endif
 			strcpy(p, HTML_INDEX_FILE);
 #ifdef ALLOW_DIR_LISTINGS
-			if ((fd = open(dirname, O_RDONLY)) < 0) {
+			fd = open(dirname, O_RDONLY);
+			if (fd < 0) {
 				*p = '\0';
 				fd = open(dirname, O_RDONLY);
 				if (fd >= 0) {
