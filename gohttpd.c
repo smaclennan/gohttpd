@@ -55,7 +55,7 @@ static int npoll;
 
 #define HTML_INDEX_FILE	"index.html"
 
-unsigned bad_munmaps;
+static unsigned bad_munmaps;
 
 /* forward references */
 static void gohttpd(char *name);
@@ -758,7 +758,7 @@ static int http_error301(struct connection *conn, char *request)
 #endif
 
 /* For all but 301 errors */
-int http_error(struct connection *conn, int status)
+static int http_error(struct connection *conn, int status)
 {
 	char *title, *msg;
 	int n1, n2;

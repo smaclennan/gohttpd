@@ -33,6 +33,7 @@
 
 #include "gohttpd.h"
 
+#define HAVE_INET_NTOP
 #ifndef HAVE_INET_NTOP
 #define IPV4_ONLY
 #endif
