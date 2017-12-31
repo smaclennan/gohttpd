@@ -114,6 +114,7 @@ int listen_socket(int port);
 int accept_socket(int sock, struct connection *conn);
 const char *ntoa(struct connection *conn); /* helper */
 void alloc_sock_addr(struct connection *conn);
+void set_cork(int sock, int on);
 
 /* exported from config.c */
 extern char *config;

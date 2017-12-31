@@ -119,6 +119,13 @@ void alloc_sock_addr(struct connection *conn)
 		fatal_error("Out of memory");
 }
 
+void set_cork(int sock, int on)
+{	/* Optimization - not an error if it fails */
+#if defined(TCP_NOPUSH) && !defined(TCP_CORK)
+#define TCP_CORK TCP_NOPUSH
+#endif
+	setsockopt(sock, IPPROTO_TCP, TCP_CORK, &on, sizeof(on));
+}
 
 /* network byte order */
 const char *ntoa(struct connection *conn)

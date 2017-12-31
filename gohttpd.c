@@ -556,6 +556,7 @@ static int write_request(struct connection *conn)
 	if (conn->in_fd >= 0) {
 		n = sendfile(SOCKET(conn), conn->in_fd, &conn->in_offset, conn->len);
 		if (n > 0) {
+			set_cork(SOCKET(conn), 0);
 			conn->len -= n;
 			if (conn->len > 0)
 				return 0;
@@ -851,6 +852,7 @@ static int do_file(struct connection *conn, int fd)
 	conn->n_iovs = 1;
 	conn->in_fd = fd;
 	conn->in_offset = 0;
+	set_cork(SOCKET(conn), 1);
 #else
 	conn->buf = mmap_get(conn, fd);
 
