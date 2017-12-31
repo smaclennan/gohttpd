@@ -29,6 +29,12 @@
 
 #define USE_SENDFILE
 
+/* If defined we allow directory listings */
+// #define ALLOW_DIR_LISTINGS
+
+/* If defined we support 301 errors */
+// #define ADD_301_SUPPORT
+
 #define GOHTTPD_STR		"Apache"
 #define GOHTTPD_VERSION "0.1"
 
@@ -49,12 +55,6 @@
  */
 #define POLL_TIMEOUT	 1	/* seconds */
 #define MAX_IDLE_TIME	60	/* seconds */
-
-/* If defined we allow directory listings */
-// #define ALLOW_DIR_LISTINGS
-
-/* If defined we support 301 errors */
-// #define ADD_301_SUPPORT
 
 #define HTTP_ROOT		"/var/www/htdocs"
 #define HTTP_CHROOT		"/var/www"
@@ -131,6 +131,8 @@ extern int   do_chroot;
 
 void read_config(char *fname);
 void fatal_error(const char *msg, ...);
+
+int do_dir(struct connection *conn, int fd, const char *dirname);
 
 #define SOCKET(c)	((c)->ufd->fd)
 

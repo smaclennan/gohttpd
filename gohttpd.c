@@ -1,6 +1,5 @@
-/*
- * gohttpd.c - the mainline for the go httpd
- * Copyright (C) 2015 Sean MacLennan <seanm@seanm.ca>
+/* gohttpd.c - the mainline for the go httpd
+ * Copyright (C) 2002-2018 Sean MacLennan <seanm@seanm.ca>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -17,7 +16,6 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-
 #include <stdlib.h>
 #include <sys/types.h>
 #include <string.h>
@@ -649,13 +647,13 @@ static int gohttpd_stats(struct connection *conn)
 	int n;
 
 	n = snprintf(buf, sizeof(buf),
-				 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
-				 "Requests:     %10u\r\n"
-				 "Max parallel: %10u\r\n"
-				 "Max length:   %10u\r\n",
-				 uptime(up, sizeof(up)),
-				 n_requests,
-				 max_requests, max_length);
+		     "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+		     "Requests:     %10u\r\n"
+		     "Max parallel: %10u\r\n"
+		     "Max length:   %10u\r\n",
+		     uptime(up, sizeof(up)),
+		     n_requests,
+		     max_requests, max_length);
 
 	if (bad_munmaps)
 		snprintf(buf + n, sizeof(buf) - n, "BAD UNMAPS:   %10u\r\n", bad_munmaps);
@@ -710,8 +708,8 @@ static int http_error301(struct connection *conn, char *request)
 	/* Be nice and give the moved address. */
 	title = "301 Moved Permanently";
 	sprintf(str,
-			"The document has moved <a href=\"/%s/\">here</a>.",
-			request);
+		"The document has moved <a href=\"/%s/\">here</a>.",
+		request);
 	msg = strdup(str);
 	if (msg == NULL) {
 		syslog(LOG_WARNING, "http_error: Out of memory.");
@@ -720,11 +718,11 @@ static int http_error301(struct connection *conn, char *request)
 	}
 
 	sprintf(str,
-			"HTTP/1.0 %s\r\n"
-			SERVER_STR
-			"Content-Type: text/html\r\n"
-			"Location: /%s/\r\n\r\n",
-			title, request);
+		"HTTP/1.0 %s\r\n"
+		SERVER_STR
+		"Content-Type: text/html\r\n"
+		"Location: /%s/\r\n\r\n",
+		title, request);
 
 	/* Build the html body */
 	p = str + strlen(str);
@@ -794,20 +792,20 @@ static int http_error(struct connection *conn, int status)
 	}
 
 	n1 = snprintf(conn->http_header, sizeof(conn->http_header),
-				  "HTTP/1.0 %s\r\n"
-				  SERVER_STR
-				  "Content-Type: text/html\r\n\r\n",
-				  title);
+		      "HTTP/1.0 %s\r\n"
+		      SERVER_STR
+		      "Content-Type: text/html\r\n\r\n",
+		      title);
 
 	/* Build the html body */
 	n2 = snprintf(conn->tmp_buf, sizeof(conn->tmp_buf),
-				  "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
-				  "<html lang=\"en\">\n<head>\n"
-				  "<title>%s</title>\r\n"
-				  "</head>\n<body><h1>%s</h1>\r\n"
-				  "<p>%s\r\n"
-				  "</body></html>\r\n",
-				  title, title, msg);
+		      "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
+		      "<html lang=\"en\">\n<head>\n"
+		      "<title>%s</title>\r\n"
+		      "</head>\n<body><h1>%s</h1>\r\n"
+		      "<p>%s\r\n"
+		      "</body></html>\r\n",
+		      title, title, msg);
 
 	conn->status = status;
 
@@ -825,12 +823,11 @@ static int http_error(struct connection *conn, int status)
 static int http_build_response(struct connection *conn)
 {
 	conn->status = 200;
-
 	return snprintf(conn->http_header, sizeof(conn->http_header),
-					"HTTP/1.1 200 OK\r\n"
-					SERVER_STR
-					"Connection: close\r\n"
-					"Content-Length: %d\r\n\r\n", conn->len);
+			"HTTP/1.1 200 OK\r\n"
+			SERVER_STR
+			"Connection: close\r\n"
+			"Content-Length: %d\r\n\r\n", conn->len);
 }
 
 static int do_file(struct connection *conn, int fd)
@@ -877,90 +874,6 @@ static int do_file(struct connection *conn, int fd)
 
 	return 0;
 }
-
-#ifdef ALLOW_DIR_LISTINGS
-/* SAM HACK FOR NOW */
-static char dirbuf[16 * 1024];
-
-static const char *header =
-	"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n"
-	"<html lang=\"en\">\n"
-	"<head><title>Index of %s</title>\n"
-	"<body>\n<h2>Index of %s</h2><hr>\n";
-
-static const char *trailer = "<hr>\n</body></html>\n";
-
-static int do_dir(struct connection *conn, int fd, const char *dirname)
-{
-	int n;
-	struct stat sbuf;
-	char path[1024];
-
-	n = snprintf(dirbuf, sizeof(dirbuf), header, dirname, dirname);
-
-	if (strcmp(dirname, "/"))
-		n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-					  "<a href=\"../\">Parent Directory/</a><br>\n");
-
-	close(fd);
-
-	struct dirent **namelist, *ent;
-	int i, n_files;
-
-	if (strcmp(dirname, "/") == 0)
-		n_files = scandir(".", &namelist, NULL, alphasort);
-	else
-		n_files = scandir(dirname, &namelist, NULL, alphasort);
-	if (n_files < 0) {
-		perror("scandir");
-		return 1;
-	}
-
-	for (i = 0; i < n_files; ++i) {
-		ent = namelist[i];
-		if (*ent->d_name != '.') {
-			if (*(dirname + 1))
-				snprintf(path, sizeof(path), "%s%s", dirname, ent->d_name);
-			else
-				snprintf(path, sizeof(path), "%s", ent->d_name);
-			if (stat(path, &sbuf) == 0) {
-				if (S_ISDIR(sbuf.st_mode))
-					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-								  "<a href=\"%s/\">%s/</a><br>\n",
-								  ent->d_name, ent->d_name);
-				else
-					n += snprintf(dirbuf + n, sizeof(dirbuf) - n,
-								  "<a href=\"%s\">%s</a><br>\n",
-								  ent->d_name, ent->d_name);
-			}
-			else perror(path); // SAM DBG
-		}
-		free(namelist[i]);
-	}
-
-	free(namelist);
-
-	conn->buf = (unsigned char *)strdup(dirbuf);
-
-	if (conn->buf) {
-		conn->iovs[1].iov_base = conn->buf;
-		conn->iovs[1].iov_len  = n;
-	}
-
-	conn->iovs[2].iov_base = (void *)trailer;
-	conn->iovs[2].iov_len = strlen(trailer); // SAM
-
-	conn->len = conn->iovs[1].iov_len + conn->iovs[2].iov_len;
-
-	conn->iovs[0].iov_base = conn->http_header;
-	conn->iovs[0].iov_len  = http_build_response(conn);
-	conn->len += conn->iovs[0].iov_len;
-
-	conn->n_iovs = 3;
-
-	return 0;
-}
-#endif
 
 static int isdir(char *name)
 {
@@ -1074,3 +987,11 @@ static void mmap_release(struct connection *conn)
 	}
 }
 #endif
+
+/*
+ * Local Variables:
+ * indent-tabs-mode: t
+ * c-basic-offset: 8
+ * tab-width: 8
+ * End:
+ */
