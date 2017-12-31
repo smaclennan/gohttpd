@@ -493,7 +493,7 @@ static int read_request(struct connection *conn)
 	if (conn->offset > max_length)
 		max_length = conn->offset;
 
-	if (strcmp(conn->cmd, "STATS\r\n") == 0)
+	if (strncmp(conn->cmd, "STATS", 5) == 0)
 		return gohttpd_stats(conn);
 
 	if (strncmp(conn->cmd, "GET ",  4) == 0 ||

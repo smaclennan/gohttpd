@@ -34,8 +34,8 @@
 /* If defined we support 301 errors */
 // #define ADD_301_SUPPORT
 
-#define GOHTTPD_STR		"Apache"
-#define GOHTTPD_VERSION "0.1"
+#define GOHTTPD_STR	"Apache"
+#define GOHTTPD_VERSION	"0.1"
 
 #define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
 #define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
@@ -55,12 +55,12 @@
 #define POLL_TIMEOUT	 1	/* seconds */
 #define MAX_IDLE_TIME	60	/* seconds */
 
-#define HTTP_ROOT		"/var/www/htdocs"
-#define HTTP_CHROOT		"/var/www"
+#define HTTP_ROOT	"/var/www/htdocs"
+#define HTTP_CHROOT	"/var/www"
 #define HTTP_PIDFILE	"/var/run/gohttpd.pid"
-#define HTTP_CONFIG		"/etc/gohttpd.conf"
-#define HTTP_PORT		80
-#define HTTP_USER		"apache"
+#define HTTP_CONFIG	"/etc/gohttpd.conf"
+#define HTTP_PORT	80
+#define HTTP_USER	"apache"
 
 #define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
 #define HTTP_LOG_CHROOT	"/logs/gohttpd.log"
