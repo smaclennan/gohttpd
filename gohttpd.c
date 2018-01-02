@@ -916,15 +916,19 @@ int http_get(struct connection *conn)
 		snprintf(dirname, sizeof(dirname) - 20, "%s", request);
 		if (isdir(dirname)) {
 			char *p = dirname + strlen(dirname);
-#ifdef ADD_301_SUPPORT
 			if (*(p - 1) != '/') {
+#ifdef ADD_301_SUPPORT
 				/* We must send back a 301
 				 * response or relative
 				 * URLs will not work
 				 */
 				return http_error301(conn, request);
-			}
+#else
+				/* just try to deal with it */
+				*p++ = '/';
+
 #endif
+			}
 			strcpy(p, HTML_INDEX_FILE);
 			fd = open(dirname, O_RDONLY);
 #ifdef ALLOW_DIR_LISTINGS
