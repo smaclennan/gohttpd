@@ -926,8 +926,8 @@ int http_get(struct connection *conn)
 			}
 #endif
 			strcpy(p, HTML_INDEX_FILE);
-#ifdef ALLOW_DIR_LISTINGS
 			fd = open(dirname, O_RDONLY);
+#ifdef ALLOW_DIR_LISTINGS
 			if (fd < 0) {
 				*p = '\0';
 				fd = open(dirname, O_RDONLY);
@@ -938,8 +938,6 @@ int http_get(struct connection *conn)
 					return rc;
 				}
 			}
-#else
-			fd = open(dirname, O_RDONLY);
 #endif
 		} else
 			fd = open(dirname, O_RDONLY);
