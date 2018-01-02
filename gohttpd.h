@@ -40,7 +40,7 @@
 #define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
 #define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
 
-#define MAX_LINE	2048 /* Older versions of Lynx send a huge line */
+#define MAX_LINE	1024 /* Max seen about 600 */
 #define MIN_REQUESTS	4
 #define HTTP_BACKLOG	10 /* helps when backed up */
 
@@ -69,7 +69,7 @@ struct connection {
 	int conn_n;
 	struct pollfd *ufd;
 	void *sock_addr;
-	char *cmd;
+	char cmd[MAX_LINE];
 	off_t offset;
 	unsigned int len;
 	int   status;

@@ -106,8 +106,6 @@ static void cleanup(void)
 	for (conn = conns, i = 0; i < max_conns; ++i, ++conn) {
 		if (SOCKET(conn) != -1)
 			close_connection(conn, 500);
-		if (conn->cmd)
-			free(conn->cmd);
 		free(conn->sock_addr);
 	}
 
@@ -317,32 +315,25 @@ static void gohttpd(char *name)
 
 static void close_connection(struct connection *conn, int status)
 {
+	char *p;
+
 	if (verbose > 2)
 		printf("Close request\n");
 
 	--n_connections;
 
-	if (conn->cmd) {
-		/* Make sure we have a clean cmd */
-		char *p;
+	/* Make sure we have a clean cmd */
+	for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
+		;
+	*p = '\0';
 
-		for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
-			;
-		*p = '\0';
-
-		if (strncmp(conn->cmd, "GET ", 4) == 0 ||
-		    strncmp(conn->cmd, "HEAD ", 5) == 0)
-			conn->http = 1;
-	}
+	if (strncmp(conn->cmd, "GET ", 4) == 0 ||
+	    strncmp(conn->cmd, "HEAD ", 5) == 0)
+		conn->http = 1;
 
 	/* Log hits in one place. Do not log stat requests. */
 	if (status != 1000)
 		log_hit(conn, status);
-
-	if (conn->conn_n > MIN_REQUESTS && conn->cmd) {
-		free(conn->cmd);
-		conn->cmd = NULL;
-	}
 
 #ifdef USE_SENDFILE
 	if (conn->in_fd >= 0) {
@@ -374,6 +365,7 @@ static void close_connection(struct connection *conn, int status)
 	conn->http = 0;
 	conn->referer = NULL;
 	conn->user_agent = NULL;
+	*conn->cmd = 0;
 #ifdef ADD_301_SUPPORT
 	if (conn->errorstr) {
 		free(conn->errorstr);
@@ -434,14 +426,6 @@ static int new_connection(int csock)
 		conn->mapped = 0;
 #endif
 		time(&conn->access);
-
-		if (!conn->cmd) {
-			conn->cmd = malloc(MAX_LINE + 1);
-			if (!conn->cmd) {
-				syslog(LOG_WARNING, "Out of memory.");
-				close_connection(conn, 503);
-			}
-		}
 	}
 }
 
