@@ -370,12 +370,10 @@ static void close_connection(struct connection *conn, int status)
 	conn->referer = NULL;
 	conn->user_agent = NULL;
 	*conn->cmd = 0;
-#ifdef ADD_301_SUPPORT
 	if (conn->errorstr) {
 		free(conn->errorstr);
 		conn->errorstr = NULL;
 	}
-#endif
 
 	conn->status = 200;
 
@@ -692,7 +690,6 @@ static const char *msg_500 =
 	"An internal server error occurred. Try again later.";
 
 
-#ifdef ADD_301_SUPPORT
 /* This is a very specialized build_response just for 301 errors. */
 static int http_error301(struct connection *conn, char *request)
 {
@@ -741,7 +738,6 @@ static int http_error301(struct connection *conn, char *request)
 
 	return 0;
 }
-#endif
 
 /* For all but 301 errors */
 static int http_error(struct connection *conn, int status)
@@ -903,17 +899,11 @@ int http_get(struct connection *conn)
 		if (isdir(dirname)) {
 			char *p = dirname + strlen(dirname);
 			if (*(p - 1) != '/') {
-#ifdef ADD_301_SUPPORT
 				/* We must send back a 301
 				 * response or relative
 				 * URLs will not work
 				 */
 				return http_error301(conn, request);
-#else
-				/* just try to deal with it */
-				*p++ = '/';
-
-#endif
 			}
 			strcpy(p, HTML_INDEX_FILE);
 			fd = open(dirname, O_RDONLY);

@@ -31,9 +31,6 @@
 /* If defined we allow directory listings */
 // #define ALLOW_DIR_LISTINGS
 
-/* If defined we support 301 errors */
-#define ADD_301_SUPPORT
-
 #define GOHTTPD_STR	"Apache"
 #define GOHTTPD_VERSION	"0.1"
 
@@ -103,9 +100,7 @@ struct connection {
 	 * packet right now is 315 with stock SERVER_STR.
 	 */
 	char http_header[512];
-#ifdef ADD_301_SUPPORT
 	char *errorstr; /* for large 301 replies */
-#endif
 };
 
 /* exported from log.c */
