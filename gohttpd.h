@@ -32,7 +32,7 @@
 // #define ALLOW_DIR_LISTINGS
 
 /* If defined we support 301 errors */
-// #define ADD_301_SUPPORT
+#define ADD_301_SUPPORT
 
 #define GOHTTPD_STR	"Apache"
 #define GOHTTPD_VERSION	"0.1"
@@ -73,8 +73,10 @@ struct connection {
 	off_t offset;
 	unsigned int len;
 	int   status;
-#ifdef ALLOW_DIR_LISTINGS
-	struct iovec iovs[4];
+#ifdef USE_SENDFILE
+	struct iovec iovs[1];
+#elif defined(ALLOW_DIR_LISTINGS)
+	struct iovec iovs[3];
 #else
 	struct iovec iovs[2];
 #endif
@@ -96,10 +98,13 @@ struct connection {
 #define HTTP_HEAD	2
 	char *user_agent; /* combined log only */
 	char *referer;    /* combined log only */
-	char http_header[128];
-	char tmp_buf[256];
+	/* The http_header needs to be big enough to store an http
+	 * error reply (not counting 301 errors). The largest error
+	 * packet right now is 315 with stock SERVER_STR.
+	 */
+	char http_header[512];
 #ifdef ADD_301_SUPPORT
-	char *errorstr;
+	char *errorstr; /* for large 301 replies */
 #endif
 };
 
@@ -144,6 +149,9 @@ int do_dir(struct connection *conn, int fd, const char *dirname);
 	} while (0)
 
 #define set_writeable(c) ((c)->ufd->events = POLLOUT)
+
+#define likely(x)       __builtin_expect((x),1)
+#define unlikely(x)     __builtin_expect((x),0)
 
 #endif /* _GOHTTPD_H_ */
 
