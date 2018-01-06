@@ -293,32 +293,26 @@ static int new_connection(int csock)
 	}
 }
 
-#define SECONDS_IN_A_MINUTE	(60)
-#define SECONDS_IN_AN_HOUR	(SECONDS_IN_A_MINUTE * 60)
+#define SECONDS_IN_AN_HOUR	(60 * 60)
 #define SECONDS_IN_A_DAY	(SECONDS_IN_AN_HOUR * 24)
 
 static char *uptime(char *str, int len)
 {
 	time_t up = time(NULL) - started;
+	int days = up / SECONDS_IN_A_DAY;
+	int hours = (up % SECONDS_IN_A_DAY) / SECONDS_IN_AN_HOUR;
 
-	if (up >= SECONDS_IN_A_DAY) {
-		up /= SECONDS_IN_A_DAY;
-		snprintf(str, len, "%ld %s", up, up == 1 ? "day" : "days");
-	} else if (up >= SECONDS_IN_AN_HOUR) {
-		up /= SECONDS_IN_AN_HOUR;
-		snprintf(str, len, "%ld %s", up, up == 1 ? "hour" : "hours");
-	} else
-		snprintf(str, len, "< 1 hour");
-
+	snprintf(str, len, "%d day%s %d hour%s",
+		 days, days == 1 ? "" : "s", hours, hours == 1 ? "" : "s");
 	return str;
 }
 
 static int gohttpd_stats(struct connection *conn)
 {
-	char buf[200], up[12];
+	char buf[128], up[20];
 
 	snprintf(buf, sizeof(buf),
-		 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+		 "gohttpd " GOHTTPD_VERSION "  %s\r\n"
 		 "Requests:     %10u\r\n"
 		 "Max parallel: %10u\r\n"
 		 "Max length:   %10u\r\n",
@@ -419,24 +413,20 @@ static int http_error301(struct connection *conn, char *request)
 	const char *title = "301 Moved Permanently";
 	int n;
 
-	/* Build the http header */
-	n = sprintf(str,
-		    "HTTP/1.0 %s\r\n"
-		    SERVER_STR
-		    "Content-Type: text/html\r\n"
-		    "Location: /%s/\r\n\r\n",
-		    title, request);
-
-	/* Build the html body. Be nice and give the moved address. */
-	n += snprintf(str + n, sizeof(str) - n,
+	n = snprintf(str, sizeof(str),
+		     /* http header */
+		     "HTTP/1.0 %s\r\n"
+		     SERVER_STR
+		     "Content-Type: text/html\r\n"
+		     "Location: /%s/\r\n\r\n"
+		     /* html body */
 		     "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
 		     "<html lang=\"en\">\n<head>\n"
 		     "<title>%s</title>\r\n"
 		     "</head>\n<body><h1>%s</h1>\r\n"
 		     "<p>The document has moved <a href=\"/%s/\">here</a>.\r\n"
 		     "</body></html>\r\n",
-		     title, title, request);
-
+		     title, request, title, title, request);
 
 	if (n < sizeof(conn->http_header)) {
 		/* normal case - we fit in header */
