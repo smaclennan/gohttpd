@@ -806,67 +806,6 @@ static void setup_privs(void)
 	setgid(gid);
 }
 
-static void main_loop(int csock)
-{
-	struct connection *conn;
-	int i, n;
-	int timeout;
-
-	while (1) {
-		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
-		n = poll(ufds, npoll, timeout);
-		if (n < 0) {
-			syslog(LOG_WARNING, "poll: %m");
-			continue;
-		}
-
-		/* Simplistic timeout to start with.
-		 * Only check for old connections on a timeout.
-		 * Low overhead, but under high load may leave connections
-		 * around longer.
-		 */
-		if (n == 0) {
-			check_old_connections();
-			continue;
-		}
-
-		if (ufds[0].revents) {
-			new_connection(ufds[0].fd);
-			--n;
-		}
-
-		for (conn = conns, i = 0; n > 0 && i < npoll; ++i, ++conn)
-			if (conn->ufd->revents & POLLIN) {
-				read_request(conn);
-				--n;
-			} else if (conn->ufd->revents & POLLOUT) {
-				write_request(conn);
-				--n;
-			} else if (conn->ufd->revents) {
-				/* Error */
-				int status;
-
-				if (conn->ufd->revents & POLLHUP) {
-					syslog(LOG_DEBUG, "Connection hung up");
-					status = 504;
-				} else if (conn->ufd->revents & POLLNVAL) {
-					syslog(LOG_DEBUG, "Connection invalid");
-					status = 410;
-				} else {
-					syslog(LOG_DEBUG, "Revents = 0x%x",
-					       conn->ufd->revents);
-					status = 501;
-				}
-
-				close_connection(conn, status);
-				--n;
-			}
-
-		if (n > 0)
-			syslog(LOG_DEBUG, "Not all requests processed");
-	}
-}
-
 static int listen_socket(int port)
 {
 	int s, optval;
@@ -918,7 +857,8 @@ static int listen_socket(int port)
 int main(int argc, char *argv[])
 {
 	char *config = NULL;
-	int c, csock, i, go_daemon = 0;
+	int c, i, n, timeout, go_daemon = 0;
+	struct connection *conn;
 
 	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
 		switch (c) {
@@ -935,7 +875,7 @@ int main(int argc, char *argv[])
 			++verbose;
 			break;
 		default:
-			fatal_error("usage: %s [-dpv] [-m max_conns] [-c config]\n", *argv);
+			fatal_error("usage: %s [-dv] [-m max_conns] [-c config]\n", *argv);
 		}
 
 	read_config(config);
@@ -948,13 +888,11 @@ int main(int argc, char *argv[])
 	if (!conns || !ufds)
 		fatal_error("Not enough memory. Try reducing max-connections.");
 
-	/* connection socket */
-	csock = listen_socket(port);
-	if (csock < 0)
-		fatal_error("Unable to create socket: %m");
-	ufds[0].fd = csock;
+	ufds[0].fd = listen_socket(port);
 	ufds[0].events = POLLIN;
 	npoll = 1;
+	if (ufds[0].fd < 0)
+		fatal_error("Unable to create socket: %m");
 
 	for (i = 0; i < max_conns; ++i) {
 		conns[i].status = 200;
@@ -997,9 +935,56 @@ int main(int argc, char *argv[])
 
 	log_open(logfile);
 
-	main_loop(csock); /* never returns */
+	while (1) {
+		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
+		n = poll(ufds, npoll, timeout);
+		if (n < 0) {
+			syslog(LOG_WARNING, "poll: %m");
+			continue;
+		}
 
-	return 1;
+		/* Simplistic timeout to start with.
+		 * Only check for old connections on a timeout.
+		 * Low overhead, but under high load may leave connections
+		 * around longer.
+		 */
+		if (n == 0) {
+			check_old_connections();
+			continue;
+		}
+
+		if (ufds[0].revents) {
+			new_connection(ufds[0].fd);
+			--n;
+		}
+
+		for (conn = conns, i = 0; n > 0 && i < npoll; ++i, ++conn)
+			if (conn->ufd->revents & POLLIN) {
+				read_request(conn);
+				--n;
+			} else if (conn->ufd->revents & POLLOUT) {
+				write_request(conn);
+				--n;
+			} else if (conn->ufd->revents) {
+				/* Error */
+				int status;
+
+				if (conn->ufd->revents & POLLHUP) {
+					syslog(LOG_DEBUG, "Connection hung up");
+					status = 504;
+				} else if (conn->ufd->revents & POLLNVAL) {
+					syslog(LOG_DEBUG, "Connection invalid");
+					status = 410;
+				} else {
+					syslog(LOG_DEBUG, "Revents = 0x%x",
+					       conn->ufd->revents);
+					status = 501;
+				}
+
+				close_connection(conn, status);
+				--n;
+			}
+	}
 }
 
 /*
