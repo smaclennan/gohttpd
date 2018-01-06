@@ -43,13 +43,11 @@ static int verbose;
 static unsigned int max_requests;
 static unsigned int max_length;
 static unsigned int n_requests;
-static int      n_connections; /* yes signed, I want to know if it goes -ve */
 static time_t   started;
 
-static struct connection *conns;
+static struct connection *conns, *head;
 
 static struct pollfd *ufds;
-static int npoll;
 
 #if defined(USE_SENDFILE) && defined(ALLOW_DIR_LISTINGS)
 #error Directory listings and sendfile are currently incompatible
@@ -129,11 +127,19 @@ const char *ntoa(struct connection *conn)
 static void close_connection(struct connection *conn, int status)
 {
 	char *p;
+	struct connection *c, *prev = NULL;
 
 	if (verbose > 2)
 		printf("Close request\n");
 
-	--n_connections;
+	for (c = head; c; prev = c, c = c->next)
+		if (c == conn) {
+			if (prev)
+				prev->next = c->next;
+			else
+				head = c->next;
+			break;
+		}
 
 	/* Make sure we have a clean cmd */
 	for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
@@ -171,8 +177,6 @@ static void close_connection(struct connection *conn, int status)
 		close(SOCKET(conn));
 		conn->ufd->fd = -1;
 		conn->ufd->revents = 0;
-		while (npoll > 1 && ufds[npoll - 1].fd == -1)
-			--npoll;
 	}
 
 	conn->http = 0;
@@ -278,8 +282,8 @@ static int new_connection(int csock)
 		}
 
 		/* Set *before* any closes */
-		set_readable(conn, sock);
-		++n_connections;
+		conn->ufd->fd = sock;
+		conn->ufd->events = POLLIN;		\
 		++n_requests;
 		if (i > max_requests)
 			max_requests = i;
@@ -290,6 +294,10 @@ static int new_connection(int csock)
 		conn->mapped = 0;
 #endif
 		time(&conn->access);
+
+		/* add to in use list */
+		conn->next = head;
+		head = conn;
 	}
 }
 
@@ -857,7 +865,7 @@ static int listen_socket(int port)
 int main(int argc, char *argv[])
 {
 	char *config = NULL;
-	int c, i, go_daemon = 0;
+	int c, i, npoll, go_daemon = 0;
 	struct connection *conn;
 
 	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
@@ -882,15 +890,15 @@ int main(int argc, char *argv[])
 
 	if (max_conns == 0)
 		max_conns = 25;
+	npoll = max_conns + 1;
 
 	conns = calloc(max_conns, sizeof(struct connection));
-	ufds  = calloc(max_conns + 1, sizeof(struct pollfd));
+	ufds  = calloc(npoll, sizeof(struct pollfd));
 	if (!conns || !ufds)
 		fatal_error("Not enough memory. Try reducing max-connections.");
 
 	ufds[0].fd = listen_socket(port);
 	ufds[0].events = POLLIN;
-	npoll = 1;
 	if (ufds[0].fd < 0)
 		fatal_error("Unable to create socket: %m");
 
@@ -936,10 +944,8 @@ int main(int argc, char *argv[])
 	log_open(logfile);
 
 	while (1) {
-		int n, timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
-		do
-			n = poll(ufds, npoll, timeout);
-		while (n < 0);
+		int timeout = head ? (POLL_TIMEOUT * 1000) : -1;
+		int n = poll(ufds, npoll, timeout);
 
 		/* Simplistic timeout to start with.  Only check for
 		 * old connections on a timeout.  Low overhead, but
@@ -951,36 +957,26 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		if (ufds[0].revents) {
+		if (ufds[0].revents)
 			new_connection(ufds[0].fd);
-			--n;
-		}
 
-		for (conn = conns, i = 0; n > 0 && i < npoll; ++i, ++conn)
-			if (conn->ufd->revents & POLLIN) {
+		for (conn = head; conn; conn = conn->next)
+			if (conn->ufd->revents & POLLIN)
 				read_request(conn);
-				--n;
-			} else if (conn->ufd->revents & POLLOUT) {
+			else if (conn->ufd->revents & POLLOUT)
 				write_request(conn);
-				--n;
-			} else if (conn->ufd->revents) {
+			else if (conn->ufd->revents) {
 				/* Error */
 				int status;
 
-				if (conn->ufd->revents & POLLHUP) {
-					syslog(LOG_DEBUG, "Connection hung up");
+				if (conn->ufd->revents & POLLHUP)
 					status = 504;
-				} else if (conn->ufd->revents & POLLNVAL) {
-					syslog(LOG_DEBUG, "Connection invalid");
+				else if (conn->ufd->revents & POLLNVAL)
 					status = 410;
-				} else {
-					syslog(LOG_DEBUG, "Revents = 0x%x",
-					       conn->ufd->revents);
+				else
 					status = 501;
-				}
 
 				close_connection(conn, status);
-				--n;
 			}
 	}
 }

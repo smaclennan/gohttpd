@@ -114,6 +114,7 @@ struct connection {
 	 */
 	char http_header[512];
 	char *errorstr; /* for large 301 replies */
+	struct connection *next;
 };
 
 const char *ntoa(struct connection *conn); /* helper */
@@ -142,14 +143,6 @@ void fatal_error(const char *msg, ...);
 int do_dir(struct connection *conn, int fd, const char *dirname);
 
 #define SOCKET(c)	((c)->ufd->fd)
-
-#define set_readable(c, sock)				\
-	do {						\
-		(c)->ufd->fd = sock;			\
-		(c)->ufd->events = POLLIN;		\
-		if ((c)->conn_n + 2 > npoll)		\
-			npoll = (c)->conn_n + 2;	\
-	} while (0)
 
 #define set_writeable(c) ((c)->ufd->events = POLLOUT)
 
