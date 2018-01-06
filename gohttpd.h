@@ -40,7 +40,7 @@
 //#define ALLOW_DIR_LISTINGS
 
 #define GOHTTPD_STR	"Apache"
-#define GOHTTPD_VERSION	"0.1"
+#define GOHTTPD_VERSION	"0.2"
 
 #define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
 #define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
