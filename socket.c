@@ -68,6 +68,7 @@ int listen_socket(int port)
 	if (s == -1)
 		return -1;
 
+	optval = 1;
 	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
 		       (char *)&optval, sizeof(optval)) == -1 ||
 	    bind(s, (struct sockaddr *)&sock_name, sizeof(sock_name)) == -1 ||

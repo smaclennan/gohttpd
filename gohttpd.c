@@ -115,6 +115,7 @@ static void cleanup(void)
 
 	free(user);
 	free(root_dir);
+	free(chroot_dir);
 	free(logfile);
 	free(pidfile);
 
