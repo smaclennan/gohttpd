@@ -857,7 +857,7 @@ static int listen_socket(int port)
 int main(int argc, char *argv[])
 {
 	char *config = NULL;
-	int c, i, n, timeout, go_daemon = 0;
+	int c, i, go_daemon = 0;
 	struct connection *conn;
 
 	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
@@ -936,17 +936,15 @@ int main(int argc, char *argv[])
 	log_open(logfile);
 
 	while (1) {
-		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
-		n = poll(ufds, npoll, timeout);
-		if (n < 0) {
-			syslog(LOG_WARNING, "poll: %m");
-			continue;
-		}
+		int n, timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
+		do
+			n = poll(ufds, npoll, timeout);
+		while (n < 0);
 
-		/* Simplistic timeout to start with.
-		 * Only check for old connections on a timeout.
-		 * Low overhead, but under high load may leave connections
-		 * around longer.
+		/* Simplistic timeout to start with.  Only check for
+		 * old connections on a timeout.  Low overhead, but
+		 * under high load may leave connections around
+		 * longer.
 		 */
 		if (n == 0) {
 			check_old_connections();
