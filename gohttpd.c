@@ -317,8 +317,7 @@ static int gohttpd_stats(struct connection *conn)
 		 "Max parallel: %10u\r\n"
 		 "Max length:   %10u\r\n",
 		 uptime(up, sizeof(up)),
-		 n_requests,
-		 max_requests, max_length);
+		 n_requests, max_requests, max_length);
 
 	while (write(SOCKET(conn), buf, strlen(buf)) < 0 && errno == EINTR)
 		;
