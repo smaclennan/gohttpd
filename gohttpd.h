@@ -24,19 +24,15 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
-#include <limits.h>
 #include <errno.h>
 #include <syslog.h>
 #include <signal.h>
 #include <ctype.h>
 #include <sys/stat.h>
-#include <sys/uio.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <arpa/inet.h>
-#include <netdb.h>
 
 #define USE_SENDFILE
 
