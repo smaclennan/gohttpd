@@ -812,10 +812,6 @@ static void main_loop(int csock)
 	int i, n;
 	int timeout;
 
-	ufds[0].fd = csock;
-	ufds[0].events = POLLIN;
-	npoll = 1;
-
 	while (1) {
 		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
 		n = poll(ufds, npoll, timeout);
@@ -919,73 +915,10 @@ static int listen_socket(int port)
 	return s;
 }
 
-static void gohttpd(char *name)
-{
-	int csock, i;
-
-	openlog(name, LOG_CONS, LOG_DAEMON);
-	syslog(LOG_INFO, "gohttpd " GOHTTPD_VERSION " (%s) starting.", name);
-	time(&started);
-
-	/* Create *before* chroot */
-	create_pidfile(pidfile);
-
-	if (chdir(root_dir))
-		fatal_error("%s: %m", root_dir);
-
-	/* Must setup privileges before chroot */
-	setup_privs();
-
-	if (do_chroot && chroot(chroot_dir))
-		fatal_error("chroot: %m");
-
-	signal(SIGHUP,  sighandler);
-	signal(SIGTERM, sighandler);
-	signal(SIGINT,  sighandler);
-	signal(SIGPIPE, sighandler);
-	signal(SIGCHLD, sighandler);
-
-	/* connection socket */
-	csock = listen_socket(port);
-	if (csock < 0)
-		fatal_error("Unable to create socket: %m");
-
-	seteuid(uid);
-
-	for (i = 0; i < max_conns; ++i) {
-		conns[i].status = 200;
-		conns[i].conn_n = i;
-	}
-
-	ufds = calloc(max_conns + 1, sizeof(struct pollfd));
-	if (!ufds)
-		fatal_error("Not enough memory. Try reducing max-connections.");
-
-	for (i = 0; i < max_conns; ++i) {
-		conns[i].ufd = &ufds[i + 1];
-		conns[i].ufd->fd = -1;
-	}
-
-	/* Now it is safe to install */
-	atexit(cleanup);
-
-	/* Do this after chroot but before seteuid */
-	log_open(logfile);
-
-	main_loop(csock);
-}
-
 int main(int argc, char *argv[])
 {
 	char *config = NULL;
-	int c, go_daemon = 0;
-	char *prog;
-
-	prog = strrchr(argv[0], '/');
-	if (prog)
-		++prog;
-	else
-		prog = argv[0];
+	int c, csock, i, go_daemon = 0;
 
 	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
 		switch (c) {
@@ -1011,16 +944,60 @@ int main(int argc, char *argv[])
 		max_conns = 25;
 
 	conns = calloc(max_conns, sizeof(struct connection));
-	if (!conns)
+	ufds  = calloc(max_conns + 1, sizeof(struct pollfd));
+	if (!conns || !ufds)
 		fatal_error("Not enough memory. Try reducing max-connections.");
 
-	if (go_daemon) {
+	/* connection socket */
+	csock = listen_socket(port);
+	if (csock < 0)
+		fatal_error("Unable to create socket: %m");
+	ufds[0].fd = csock;
+	ufds[0].events = POLLIN;
+	npoll = 1;
+
+	for (i = 0; i < max_conns; ++i) {
+		conns[i].status = 200;
+		conns[i].conn_n = i;
+		conns[i].ufd = &ufds[i + 1];
+		conns[i].ufd->fd = -1;
+	}
+
+	if (go_daemon)
 		if (daemon(0, 0) == -1)
 			fatal_error("Could not become daemon-process!");
-		else
-			gohttpd(prog); /* never returns */
-	} else
-		gohttpd(prog); /* never returns */
+
+		openlog("gohttpd", LOG_CONS, LOG_DAEMON);
+
+	syslog(LOG_INFO, "gohttpd " GOHTTPD_VERSION " starting.");
+	time(&started);
+
+	/* Create *before* chroot */
+	create_pidfile(pidfile);
+
+	if (chdir(root_dir))
+		fatal_error("%s: %m", root_dir);
+
+	/* Must setup privileges before chroot */
+	setup_privs();
+
+	if (do_chroot && chroot(chroot_dir))
+		fatal_error("chroot: %m");
+
+	signal(SIGHUP,  sighandler);
+	signal(SIGTERM, sighandler);
+	signal(SIGINT,  sighandler);
+	signal(SIGPIPE, sighandler);
+	signal(SIGCHLD, sighandler);
+
+	seteuid(uid);
+
+	/* Now it is safe to install */
+	atexit(cleanup);
+
+	log_open(logfile);
+
+	main_loop(csock); /* never returns */
 
 	return 1;
 }
