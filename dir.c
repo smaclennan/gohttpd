@@ -16,31 +16,14 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include <stdlib.h>
-#include <sys/types.h>
-#include <string.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <syslog.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/time.h>
-#include <pwd.h>
-#include <grp.h>
-#include <dirent.h>
-#include <sys/mman.h>
-#include <sys/sendfile.h>
-#include <sys/utsname.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-
 #include "gohttpd.h"
 
 #ifdef ALLOW_DIR_LISTINGS
 #ifdef USE_SENDFILE
 #error ALLOW_DIR_LISTINGS does not support sendfile
 #endif
+
+#include <dirent.h>
 
 /* SAM HACK FOR NOW */
 static char dirbuf[16 * 1024];

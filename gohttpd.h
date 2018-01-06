@@ -20,9 +20,16 @@
 #define _GOHTTPD_H_
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <time.h>
 #include <limits.h>
+#include <errno.h>
+#include <syslog.h>
+#include <signal.h>
+#include <ctype.h>
+#include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
@@ -31,10 +38,10 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-//#define USE_SENDFILE
+#define USE_SENDFILE
 
 /* If defined we allow directory listings */
-// #define ALLOW_DIR_LISTINGS
+//#define ALLOW_DIR_LISTINGS
 
 #define GOHTTPD_STR	"Apache"
 #define GOHTTPD_VERSION	"0.1"

@@ -16,26 +16,13 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include <stdlib.h>
-#include <sys/types.h>
-#include <string.h>
-#include <ctype.h>
-#include <fcntl.h>
-#include <assert.h>
-#include <syslog.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/time.h>
+#include "gohttpd.h"
+
 #include <pwd.h>
 #include <grp.h>
-#include <dirent.h>
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/sendfile.h>
-#include <sys/utsname.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-
-#include "gohttpd.h"
 
 static int verbose;
 
@@ -46,7 +33,6 @@ static unsigned int n_requests;
 static time_t   started;
 
 static struct connection *conns, *head;
-
 static struct pollfd *ufds;
 
 #if defined(USE_SENDFILE) && defined(ALLOW_DIR_LISTINGS)
