@@ -55,11 +55,11 @@
  * Simplistic connection timeout mechanism.
  * Every connection has a `last access time' associated with it. An
  * access is a new connection, a read, or a write. When we have been
- * idle for POLL_TIMEOUT seconds, we check all the connections. If a
+ * idle for POLL_TIMEOUT, we check all the connections. If a
  * connection has been idle for more than MAX_IDLE_TIME, we close the
  * connection.
  */
-#define POLL_TIMEOUT	 1	/* seconds */
+#define POLL_TIMEOUT	1000	/* milliseconds */
 #define MAX_IDLE_TIME	60	/* seconds */
 
 #define HTTP_ROOT	"/var/www/htdocs"

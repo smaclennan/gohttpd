@@ -930,14 +930,9 @@ int main(int argc, char *argv[])
 	log_open(logfile);
 
 	while (1) {
-		int timeout = head ? (POLL_TIMEOUT * 1000) : -1;
+		int timeout = head ? POLL_TIMEOUT : -1;
 		int n = poll(ufds, npoll, timeout);
 
-		/* Simplistic timeout to start with.  Only check for
-		 * old connections on a timeout.  Low overhead, but
-		 * under high load may leave connections around
-		 * longer.
-		 */
 		if (n == 0) {
 			check_old_connections();
 			continue;
