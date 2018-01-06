@@ -51,27 +51,9 @@ static struct connection *conns;
 static struct pollfd *ufds;
 static int npoll;
 
-#define HTML_INDEX_FILE	"index.html"
-
 #if defined(USE_SENDFILE) && defined(ALLOW_DIR_LISTINGS)
 #error Directory listings and sendfile are currently incompatible
 #endif
-
-/* forward references */
-static void gohttpd(char *name);
-static void create_pidfile(char *fname);
-static int new_connection(int csock);
-static int read_request(struct connection *conn);
-static int write_request(struct connection *conn);
-static int gohttpd_stats(struct connection *conn);
-static void check_old_connections(void);
-#ifndef USE_SENDFILE
-static unsigned char *mmap_get(struct connection *conn, int fd);
-static void mmap_release(struct connection *conn);
-#endif
-static int http_get(struct connection *conn);
-static int http_error(struct connection *conn, int status);
-static void close_connection(struct connection *conn, int status);
 
 /* SIGUSR1 is handled in log.c */
 static void sighandler(int signum)
@@ -95,228 +77,31 @@ static void sighandler(int signum)
 	}
 }
 
-static void cleanup(void)
+#ifndef USE_SENDFILE
+static unsigned char *mmap_get(struct connection *conn, int fd)
 {
-	struct connection *conn;
-	int i;
+	unsigned char *mapped;
 
-	close(ufds[0].fd); /* accept socket */
+	/* We mess around with conn->len */
+	conn->mapped = conn->len;
+	mapped = mmap(NULL, conn->mapped, PROT_READ, MAP_SHARED, fd, 0);
+	if (mapped == MAP_FAILED)
+		return NULL;
 
-	/*
-	 * This is mainly for valgrind.
-	 * Close any outstanding connections.
-	 * Free any cached memory.
-	 */
-	for (conn = conns, i = 0; i < max_conns; ++i, ++conn) {
-		if (SOCKET(conn) != -1)
-			close_connection(conn, 500);
-		free(conn->sock_addr);
-	}
+#ifdef MADV_SEQUENTIAL
+	/* folkert@vanheusden.com */
+	(void)madvise(mapped, conn->mapped, MADV_SEQUENTIAL);
+#endif
 
-	free(user);
-	free(root_dir);
-	free(chroot_dir);
-	free(logfile);
-	free(pidfile);
-
-	free(conns);
-	free(ufds);
-
-	closelog();
+	return mapped;
 }
 
-int main(int argc, char *argv[])
+static void mmap_release(struct connection *conn)
 {
-	char *config = NULL;
-	int c, go_daemon = 0;
-	char *prog;
-
-	prog = strrchr(argv[0], '/');
-	if (prog)
-		++prog;
-	else
-		prog = argv[0];
-
-	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
-		switch (c) {
-		case 'c':
-			config = optarg;
-			break;
-		case 'd':
-			go_daemon = 1;
-			break;
-		case 'm':
-			max_conns = strtol(optarg, NULL, 0);
-			break;
-		case 'v':
-			++verbose;
-			break;
-		default:
-			fatal_error("usage: %s [-dpv] [-m max_conns] [-c config]\n", *argv);
-		}
-
-	read_config(config);
-
-	if (max_conns == 0)
-		max_conns = 25;
-
-	conns = calloc(max_conns, sizeof(struct connection));
-	if (!conns)
-		fatal_error("Not enough memory. Try reducing max-connections.");
-
-	if (go_daemon) {
-		if (daemon(0, 0) == -1)
-			fatal_error("Could not become daemon-process!");
-		else
-			gohttpd(prog); /* never returns */
-	} else
-		gohttpd(prog); /* never returns */
-
-	return 1;
+	if (munmap(conn->buf, conn->mapped))
+		syslog(LOG_ERR, "munmap %p %d", conn->buf, conn->mapped);
 }
-
-static void setup_privs(void)
-{
-	/* If you are non-root you cannot set privileges */
-	if (getuid())
-		return;
-
-	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
-		struct passwd *pwd = getpwnam(user);
-
-		if (!pwd)
-			fatal_error("No such user: `%s'.", user);
-		if (uid == (uid_t)-1)
-			uid = pwd->pw_uid;
-		if (gid == (uid_t)-1)
-			gid = pwd->pw_gid;
-		initgroups(pwd->pw_name, pwd->pw_gid);
-	}
-
-	setgid(gid);
-}
-
-static void main_loop(int csock)
-{
-	struct connection *conn;
-	int i, n;
-	int timeout;
-
-	ufds[0].fd = csock;
-	ufds[0].events = POLLIN;
-	npoll = 1;
-
-	while (1) {
-		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
-		n = poll(ufds, npoll, timeout);
-		if (n < 0) {
-			syslog(LOG_WARNING, "poll: %m");
-			continue;
-		}
-
-		/* Simplistic timeout to start with.
-		 * Only check for old connections on a timeout.
-		 * Low overhead, but under high load may leave connections
-		 * around longer.
-		 */
-		if (n == 0) {
-			check_old_connections();
-			continue;
-		}
-
-		if (ufds[0].revents) {
-			new_connection(ufds[0].fd);
-			--n;
-		}
-
-		for (conn = conns, i = 0; n > 0 && i < npoll; ++i, ++conn)
-			if (conn->ufd->revents & POLLIN) {
-				read_request(conn);
-				--n;
-			} else if (conn->ufd->revents & POLLOUT) {
-				write_request(conn);
-				--n;
-			} else if (conn->ufd->revents) {
-				/* Error */
-				int status;
-
-				if (conn->ufd->revents & POLLHUP) {
-					syslog(LOG_DEBUG, "Connection hung up");
-					status = 504;
-				} else if (conn->ufd->revents & POLLNVAL) {
-					syslog(LOG_DEBUG, "Connection invalid");
-					status = 410;
-				} else {
-					syslog(LOG_DEBUG, "Revents = 0x%x",
-					       conn->ufd->revents);
-					status = 501;
-				}
-
-				close_connection(conn, status);
-				--n;
-			}
-
-		if (n > 0)
-			syslog(LOG_DEBUG, "Not all requests processed");
-	}
-}
-
-static void gohttpd(char *name)
-{
-	int csock, i;
-
-	openlog(name, LOG_CONS, LOG_DAEMON);
-	syslog(LOG_INFO, "gohttpd " GOHTTPD_VERSION " (%s) starting.", name);
-	time(&started);
-
-	/* Create *before* chroot */
-	create_pidfile(pidfile);
-
-	if (chdir(root_dir))
-		fatal_error("%s: %m", root_dir);
-
-	/* Must setup privileges before chroot */
-	setup_privs();
-
-	if (do_chroot && chroot(chroot_dir))
-		fatal_error("chroot: %m");
-
-	signal(SIGHUP,  sighandler);
-	signal(SIGTERM, sighandler);
-	signal(SIGINT,  sighandler);
-	signal(SIGPIPE, sighandler);
-	signal(SIGCHLD, sighandler);
-
-	/* connection socket */
-	csock = listen_socket(port);
-	if (csock < 0)
-		fatal_error("Unable to create socket: %m");
-
-	seteuid(uid);
-
-	for (i = 0; i < max_conns; ++i) {
-		conns[i].status = 200;
-		conns[i].conn_n = i;
-		alloc_sock_addr(&conns[i]);
-	}
-
-	ufds = calloc(max_conns + 1, sizeof(struct pollfd));
-	if (!ufds)
-		fatal_error("Not enough memory. Try reducing max-connections.");
-
-	for (i = 0; i < max_conns; ++i) {
-		conns[i].ufd = &ufds[i + 1];
-		conns[i].ufd->fd = -1;
-	}
-
-	/* Now it is safe to install */
-	atexit(cleanup);
-
-	/* Do this after chroot but before seteuid */
-	log_open(logfile);
-
-	main_loop(csock);
-}
+#endif
 
 static void close_connection(struct connection *conn, int status)
 {
@@ -383,6 +168,35 @@ static void close_connection(struct connection *conn, int status)
 	ufds[0].events = POLLIN; /* in case we throttled */
 }
 
+static void cleanup(void)
+{
+	struct connection *conn;
+	int i;
+
+	close(ufds[0].fd); /* accept socket */
+
+	/*
+	 * This is mainly for valgrind.
+	 * Close any outstanding connections.
+	 * Free any cached memory.
+	 */
+	for (conn = conns, i = 0; i < max_conns; ++i, ++conn) {
+		if (SOCKET(conn) != -1)
+			close_connection(conn, 500);
+		free(conn->sock_addr);
+	}
+
+	free(user);
+	free(root_dir);
+	free(chroot_dir);
+	free(logfile);
+	free(pidfile);
+
+	free(conns);
+	free(ufds);
+
+	closelog();
+}
 
 static int new_connection(int csock)
 {
@@ -432,142 +246,43 @@ static int new_connection(int csock)
 	}
 }
 
-static int read_request(struct connection *conn)
+#define SECONDS_IN_A_MINUTE	(60)
+#define SECONDS_IN_AN_HOUR	(SECONDS_IN_A_MINUTE * 60)
+#define SECONDS_IN_A_DAY	(SECONDS_IN_AN_HOUR * 24)
+
+static char *uptime(char *str, int len)
 {
-	int n;
+	time_t up = time(NULL) - started;
 
-	do
-		n = read(SOCKET(conn), conn->cmd + conn->offset,
-			 MAX_LINE - conn->offset);
-	while (n < 0 && errno == EINTR);
+	if (up >= SECONDS_IN_A_DAY) {
+		up /= SECONDS_IN_A_DAY;
+		snprintf(str, len, "%ld %s", up, up == 1 ? "day" : "days");
+	} else if (up >= SECONDS_IN_AN_HOUR) {
+		up /= SECONDS_IN_AN_HOUR;
+		snprintf(str, len, "%ld %s", up, up == 1 ? "hour" : "hours");
+	} else
+		snprintf(str, len, "< 1 hour");
 
-	if (n < 0) {
-		if (errno == EAGAIN) {
-			syslog(LOG_DEBUG, "EAGAIN\n");
-			return 0;
-		}
-
-		syslog(LOG_WARNING, "Read error (%d): %m", errno);
-		close_connection(conn, 408);
-		return 1;
-	}
-	if (n == 0) {
-		syslog(LOG_WARNING, "Read: unexpected EOF");
-		close_connection(conn, 408);
-		return 1;
-	}
-
-	conn->offset += n;
-	time(&conn->access);
-
-	/* We alloced an extra space for the '\0' */
-	conn->cmd[conn->offset] = '\0';
-
-	if (conn->cmd[conn->offset - 1] != '\n') {
-		if (conn->offset >= MAX_LINE) {
-			syslog(LOG_WARNING, "Line overflow");
-			if (strncmp(conn->cmd, "GET ",  4) == 0 ||
-			    strncmp(conn->cmd, "HEAD ", 5) == 0)
-				return http_error(conn, 414);
-			else {
-				close_connection(conn, 414);
-				return 1;
-			}
-		}
-		return 0; /* not an error */
-	}
-
-	if (conn->offset > max_length)
-		max_length = conn->offset;
-
-	if (strncmp(conn->cmd, "STATS", 5) == 0)
-		return gohttpd_stats(conn);
-
-	if (strncmp(conn->cmd, "GET ",  4) == 0 ||
-	    strncmp(conn->cmd, "HEAD ", 5) == 0) {
-		/* We must look for \r\n\r\n */
-		/* This is mainly for telnet sessions */
-		if (strstr(conn->cmd, "\r\n\r\n")) {
-			if (verbose > 2)
-				printf("Http: %s\n", conn->cmd);
-			return http_get(conn);
-		}
-		conn->http = 1;
-		return 0;
-	}
-
-	return 1;
+	return str;
 }
 
-static int write_request(struct connection *conn)
+static int gohttpd_stats(struct connection *conn)
 {
-	int n;
+	char buf[200], up[12];
 
-	if (conn->n_iovs) {
-		do
-			n = writev(SOCKET(conn), conn->iovs, conn->n_iovs);
-		while (n < 0 && errno == EINTR);
+	snprintf(buf, sizeof(buf),
+		 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
+		 "Requests:     %10u\r\n"
+		 "Max parallel: %10u\r\n"
+		 "Max length:   %10u\r\n",
+		 uptime(up, sizeof(up)),
+		 n_requests,
+		 max_requests, max_length);
 
-		if (n < 0) {
-			if (errno == EAGAIN)
-				return 0;
+	while (write(SOCKET(conn), buf, strlen(buf)) < 0 && errno == EINTR)
+		;
 
-			syslog(LOG_ERR, "writev: %m");
-			close_connection(conn, 408);
-			return 1;
-		}
-		if (n == 0) {
-			syslog(LOG_ERR, "writev unexpected EOF");
-			close_connection(conn, 408);
-			return 1;
-		}
-
-#ifdef USE_SENDFILE
-		/* Normal case only one iov */
-		if (unlikely(n < conn->iovs->iov_len)) {
-			conn->iovs->iov_len -= n;
-			conn->iovs->iov_base += n;
-			time(&conn->access);
-			return 0;
-		}
-		conn->n_iovs = 0;
-#else
-		struct iovec *iov;
-		int i;
-
-		for (iov = conn->iovs, i = 0; i < conn->n_iovs; ++i, ++iov)
-			if (n >= iov->iov_len) {
-				n -= iov->iov_len;
-				iov->iov_len = 0;
-			} else {
-				iov->iov_len -= n;
-				iov->iov_base += n;
-				time(&conn->access);
-				return 0;
-			}
-#endif
-	}
-
-#ifdef USE_SENDFILE
-	if (conn->in_fd >= 0) {
-		n = sendfile(SOCKET(conn), conn->in_fd,
-			     &conn->in_offset, conn->len);
-		if (n > 0) {
-			set_cork(SOCKET(conn), 0);
-			conn->len -= n;
-			if (conn->len > 0)
-				return 0;
-		} else if (n < 0) {
-			if (errno == EAGAIN)
-				return 0;
-
-			close_connection(conn, 408);
-			return 1;
-		}
-	}
-#endif
-
-	close_connection(conn, conn->status);
+	close_connection(conn, 1000);
 
 	return 0;
 }
@@ -616,47 +331,6 @@ static void create_pidfile(char *fname)
 		fclose(fp);
 	} else  if (errno != EACCES)
 		fatal_error("Create %s: %m", fname);
-}
-
-#define SECONDS_IN_A_MINUTE	(60)
-#define SECONDS_IN_AN_HOUR	(SECONDS_IN_A_MINUTE * 60)
-#define SECONDS_IN_A_DAY	(SECONDS_IN_AN_HOUR * 24)
-
-static char *uptime(char *str, int len)
-{
-	time_t up = time(NULL) - started;
-
-	if (up >= SECONDS_IN_A_DAY) {
-		up /= SECONDS_IN_A_DAY;
-		snprintf(str, len, "%ld %s", up, up == 1 ? "day" : "days");
-	} else if (up >= SECONDS_IN_AN_HOUR) {
-		up /= SECONDS_IN_AN_HOUR;
-		snprintf(str, len, "%ld %s", up, up == 1 ? "hour" : "hours");
-	} else
-		snprintf(str, len, "< 1 hour");
-
-	return str;
-}
-
-static int gohttpd_stats(struct connection *conn)
-{
-	char buf[200], up[12];
-
-	snprintf(buf, sizeof(buf),
-		 "gohttpd " GOHTTPD_VERSION " %12s\r\n"
-		 "Requests:     %10u\r\n"
-		 "Max parallel: %10u\r\n"
-		 "Max length:   %10u\r\n",
-		 uptime(up, sizeof(up)),
-		 n_requests,
-		 max_requests, max_length);
-
-	while (write(SOCKET(conn), buf, strlen(buf)) < 0 && errno == EINTR)
-		;
-
-	close_connection(conn, 1000);
-
-	return 0;
 }
 
 static void unquote(char *str)
@@ -935,31 +609,338 @@ int http_get(struct connection *conn)
 	return rc;
 }
 
-#ifndef USE_SENDFILE
-static unsigned char *mmap_get(struct connection *conn, int fd)
+static int read_request(struct connection *conn)
 {
-	unsigned char *mapped;
+	int n;
 
-	/* We mess around with conn->len */
-	conn->mapped = conn->len;
-	mapped = mmap(NULL, conn->mapped, PROT_READ, MAP_SHARED, fd, 0);
-	if (mapped == MAP_FAILED)
-		return NULL;
+	do
+		n = read(SOCKET(conn), conn->cmd + conn->offset,
+			 MAX_LINE - conn->offset);
+	while (n < 0 && errno == EINTR);
 
-#ifdef MADV_SEQUENTIAL
-	/* folkert@vanheusden.com */
-	(void)madvise(mapped, conn->mapped, MADV_SEQUENTIAL);
-#endif
+	if (n < 0) {
+		if (errno == EAGAIN) {
+			syslog(LOG_DEBUG, "EAGAIN\n");
+			return 0;
+		}
 
-	return mapped;
+		syslog(LOG_WARNING, "Read error (%d): %m", errno);
+		close_connection(conn, 408);
+		return 1;
+	}
+	if (n == 0) {
+		syslog(LOG_WARNING, "Read: unexpected EOF");
+		close_connection(conn, 408);
+		return 1;
+	}
+
+	conn->offset += n;
+	time(&conn->access);
+
+	/* We alloced an extra space for the '\0' */
+	conn->cmd[conn->offset] = '\0';
+
+	if (conn->cmd[conn->offset - 1] != '\n') {
+		if (conn->offset >= MAX_LINE) {
+			syslog(LOG_WARNING, "Line overflow");
+			if (strncmp(conn->cmd, "GET ",  4) == 0 ||
+			    strncmp(conn->cmd, "HEAD ", 5) == 0)
+				return http_error(conn, 414);
+			else {
+				close_connection(conn, 414);
+				return 1;
+			}
+		}
+		return 0; /* not an error */
+	}
+
+	if (conn->offset > max_length)
+		max_length = conn->offset;
+
+	if (strncmp(conn->cmd, "STATS", 5) == 0)
+		return gohttpd_stats(conn);
+
+	if (strncmp(conn->cmd, "GET ",  4) == 0 ||
+	    strncmp(conn->cmd, "HEAD ", 5) == 0) {
+		/* We must look for \r\n\r\n */
+		/* This is mainly for telnet sessions */
+		if (strstr(conn->cmd, "\r\n\r\n")) {
+			if (verbose > 2)
+				printf("Http: %s\n", conn->cmd);
+			return http_get(conn);
+		}
+		conn->http = 1;
+		return 0;
+	}
+
+	return 1;
 }
 
-static void mmap_release(struct connection *conn)
+static int write_request(struct connection *conn)
 {
-	if (munmap(conn->buf, conn->mapped))
-		syslog(LOG_ERR, "munmap %p %d", conn->buf, conn->mapped);
-}
+	int n;
+
+	if (conn->n_iovs) {
+		do
+			n = writev(SOCKET(conn), conn->iovs, conn->n_iovs);
+		while (n < 0 && errno == EINTR);
+
+		if (n < 0) {
+			if (errno == EAGAIN)
+				return 0;
+
+			syslog(LOG_ERR, "writev: %m");
+			close_connection(conn, 408);
+			return 1;
+		}
+		if (n == 0) {
+			syslog(LOG_ERR, "writev unexpected EOF");
+			close_connection(conn, 408);
+			return 1;
+		}
+
+#ifdef USE_SENDFILE
+		/* Normal case only one iov */
+		if (unlikely(n < conn->iovs->iov_len)) {
+			conn->iovs->iov_len -= n;
+			conn->iovs->iov_base += n;
+			time(&conn->access);
+			return 0;
+		}
+		conn->n_iovs = 0;
+#else
+		struct iovec *iov;
+		int i;
+
+		for (iov = conn->iovs, i = 0; i < conn->n_iovs; ++i, ++iov)
+			if (n >= iov->iov_len) {
+				n -= iov->iov_len;
+				iov->iov_len = 0;
+			} else {
+				iov->iov_len -= n;
+				iov->iov_base += n;
+				time(&conn->access);
+				return 0;
+			}
 #endif
+	}
+
+#ifdef USE_SENDFILE
+	if (conn->in_fd >= 0) {
+		n = sendfile(SOCKET(conn), conn->in_fd,
+			     &conn->in_offset, conn->len);
+		if (n > 0) {
+			set_cork(SOCKET(conn), 0);
+			conn->len -= n;
+			if (conn->len > 0)
+				return 0;
+		} else if (n < 0) {
+			if (errno == EAGAIN)
+				return 0;
+
+			close_connection(conn, 408);
+			return 1;
+		}
+	}
+#endif
+
+	close_connection(conn, conn->status);
+
+	return 0;
+}
+
+static void setup_privs(void)
+{
+	/* If you are non-root you cannot set privileges */
+	if (getuid())
+		return;
+
+	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
+		struct passwd *pwd = getpwnam(user);
+
+		if (!pwd)
+			fatal_error("No such user: `%s'.", user);
+		if (uid == (uid_t)-1)
+			uid = pwd->pw_uid;
+		if (gid == (uid_t)-1)
+			gid = pwd->pw_gid;
+		initgroups(pwd->pw_name, pwd->pw_gid);
+	}
+
+	setgid(gid);
+}
+
+static void main_loop(int csock)
+{
+	struct connection *conn;
+	int i, n;
+	int timeout;
+
+	ufds[0].fd = csock;
+	ufds[0].events = POLLIN;
+	npoll = 1;
+
+	while (1) {
+		timeout = n_connections ? (POLL_TIMEOUT * 1000) : -1;
+		n = poll(ufds, npoll, timeout);
+		if (n < 0) {
+			syslog(LOG_WARNING, "poll: %m");
+			continue;
+		}
+
+		/* Simplistic timeout to start with.
+		 * Only check for old connections on a timeout.
+		 * Low overhead, but under high load may leave connections
+		 * around longer.
+		 */
+		if (n == 0) {
+			check_old_connections();
+			continue;
+		}
+
+		if (ufds[0].revents) {
+			new_connection(ufds[0].fd);
+			--n;
+		}
+
+		for (conn = conns, i = 0; n > 0 && i < npoll; ++i, ++conn)
+			if (conn->ufd->revents & POLLIN) {
+				read_request(conn);
+				--n;
+			} else if (conn->ufd->revents & POLLOUT) {
+				write_request(conn);
+				--n;
+			} else if (conn->ufd->revents) {
+				/* Error */
+				int status;
+
+				if (conn->ufd->revents & POLLHUP) {
+					syslog(LOG_DEBUG, "Connection hung up");
+					status = 504;
+				} else if (conn->ufd->revents & POLLNVAL) {
+					syslog(LOG_DEBUG, "Connection invalid");
+					status = 410;
+				} else {
+					syslog(LOG_DEBUG, "Revents = 0x%x",
+					       conn->ufd->revents);
+					status = 501;
+				}
+
+				close_connection(conn, status);
+				--n;
+			}
+
+		if (n > 0)
+			syslog(LOG_DEBUG, "Not all requests processed");
+	}
+}
+
+static void gohttpd(char *name)
+{
+	int csock, i;
+
+	openlog(name, LOG_CONS, LOG_DAEMON);
+	syslog(LOG_INFO, "gohttpd " GOHTTPD_VERSION " (%s) starting.", name);
+	time(&started);
+
+	/* Create *before* chroot */
+	create_pidfile(pidfile);
+
+	if (chdir(root_dir))
+		fatal_error("%s: %m", root_dir);
+
+	/* Must setup privileges before chroot */
+	setup_privs();
+
+	if (do_chroot && chroot(chroot_dir))
+		fatal_error("chroot: %m");
+
+	signal(SIGHUP,  sighandler);
+	signal(SIGTERM, sighandler);
+	signal(SIGINT,  sighandler);
+	signal(SIGPIPE, sighandler);
+	signal(SIGCHLD, sighandler);
+
+	/* connection socket */
+	csock = listen_socket(port);
+	if (csock < 0)
+		fatal_error("Unable to create socket: %m");
+
+	seteuid(uid);
+
+	for (i = 0; i < max_conns; ++i) {
+		conns[i].status = 200;
+		conns[i].conn_n = i;
+		alloc_sock_addr(&conns[i]);
+	}
+
+	ufds = calloc(max_conns + 1, sizeof(struct pollfd));
+	if (!ufds)
+		fatal_error("Not enough memory. Try reducing max-connections.");
+
+	for (i = 0; i < max_conns; ++i) {
+		conns[i].ufd = &ufds[i + 1];
+		conns[i].ufd->fd = -1;
+	}
+
+	/* Now it is safe to install */
+	atexit(cleanup);
+
+	/* Do this after chroot but before seteuid */
+	log_open(logfile);
+
+	main_loop(csock);
+}
+
+int main(int argc, char *argv[])
+{
+	char *config = NULL;
+	int c, go_daemon = 0;
+	char *prog;
+
+	prog = strrchr(argv[0], '/');
+	if (prog)
+		++prog;
+	else
+		prog = argv[0];
+
+	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
+		switch (c) {
+		case 'c':
+			config = optarg;
+			break;
+		case 'd':
+			go_daemon = 1;
+			break;
+		case 'm':
+			max_conns = strtol(optarg, NULL, 0);
+			break;
+		case 'v':
+			++verbose;
+			break;
+		default:
+			fatal_error("usage: %s [-dpv] [-m max_conns] [-c config]\n", *argv);
+		}
+
+	read_config(config);
+
+	if (max_conns == 0)
+		max_conns = 25;
+
+	conns = calloc(max_conns, sizeof(struct connection));
+	if (!conns)
+		fatal_error("Not enough memory. Try reducing max-connections.");
+
+	if (go_daemon) {
+		if (daemon(0, 0) == -1)
+			fatal_error("Could not become daemon-process!");
+		else
+			gohttpd(prog); /* never returns */
+	} else
+		gohttpd(prog); /* never returns */
+
+	return 1;
+}
 
 /*
  * Local Variables:

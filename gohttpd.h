@@ -26,7 +26,7 @@
 #include <sys/uio.h>
 #include <sys/poll.h>
 
-#define USE_SENDFILE
+//#define USE_SENDFILE
 
 /* If defined we allow directory listings */
 // #define ALLOW_DIR_LISTINGS
@@ -36,6 +36,8 @@
 
 #define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
 #define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
+
+#define HTML_INDEX_FILE	"index.html"
 
 #define MAX_LINE	1024 /* Max seen about 600 */
 #define MIN_REQUESTS	4
