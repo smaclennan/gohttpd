@@ -25,6 +25,11 @@
 #include <limits.h>
 #include <sys/uio.h>
 #include <sys/poll.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 
 //#define USE_SENDFILE
 
@@ -64,10 +69,16 @@
 #define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
 #define HTTP_LOG_CHROOT	"/logs/gohttpd.log"
 
+#define HAVE_INET_NTOP
+
 struct connection {
 	int conn_n;
 	struct pollfd *ufd;
-	void *sock_addr;
+#ifdef HAVE_INET_NTOP
+	struct sockaddr_storage sock_addr;
+#else
+	struct sockaddr_in sock_addr;
+#endif
 	char cmd[MAX_LINE];
 	off_t offset;
 	unsigned int len;
@@ -105,17 +116,12 @@ struct connection {
 	char *errorstr; /* for large 301 replies */
 };
 
+const char *ntoa(struct connection *conn); /* helper */
+
 /* exported from log.c */
 int  log_open(char *log_name);
 void log_hit(struct connection *conn, unsigned int status);
 void log_close(void);
-
-/* exported from socket.c */
-int listen_socket(int port);
-int accept_socket(int sock, struct connection *conn);
-const char *ntoa(struct connection *conn); /* helper */
-void alloc_sock_addr(struct connection *conn);
-void set_cork(int sock, int on);
 
 /* exported from config.c */
 extern char *config;

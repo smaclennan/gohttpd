@@ -77,7 +77,15 @@ static void sighandler(int signum)
 	}
 }
 
-#ifndef USE_SENDFILE
+#ifdef USE_SENDFILE
+static void set_cork(int sock, int on)
+{	/* Optimization - not an error if it fails */
+#if defined(TCP_NOPUSH) && !defined(TCP_CORK)
+#define TCP_CORK TCP_NOPUSH
+#endif
+	setsockopt(sock, IPPROTO_TCP, TCP_CORK, &on, sizeof(on));
+}
+#else
 static unsigned char *mmap_get(struct connection *conn, int fd)
 {
 	unsigned char *mapped;
@@ -102,6 +110,21 @@ static void mmap_release(struct connection *conn)
 		syslog(LOG_ERR, "munmap %p %d", conn->buf, conn->mapped);
 }
 #endif
+
+/* network byte order */
+const char *ntoa(struct connection *conn)
+{
+#ifdef HAVE_INET_NTOP
+	static char a[64];
+	struct sockaddr_storage *sin = &conn->sock_addr;
+
+	return inet_ntop(sin->ss_family, sin, a, sizeof(a));
+#else
+	struct sockaddr_in *sin = (struct sockaddr_in *)conn->sock_addr;
+
+	return inet_ntoa(sin->sin_addr);
+#endif
+}
 
 static void close_connection(struct connection *conn, int status)
 {
@@ -180,11 +203,9 @@ static void cleanup(void)
 	 * Close any outstanding connections.
 	 * Free any cached memory.
 	 */
-	for (conn = conns, i = 0; i < max_conns; ++i, ++conn) {
+	for (conn = conns, i = 0; i < max_conns; ++i, ++conn)
 		if (SOCKET(conn) != -1)
 			close_connection(conn, 500);
-		free(conn->sock_addr);
-	}
 
 	free(user);
 	free(root_dir);
@@ -196,6 +217,32 @@ static void cleanup(void)
 	free(ufds);
 
 	closelog();
+}
+
+static int accept_socket(int sock, struct connection *conn)
+{
+	int new, flags;
+#ifdef HAVE_INET_NTOP
+	unsigned int addrlen = sizeof(struct sockaddr_storage);
+#else
+	unsigned int addrlen = sizeof(struct sockaddr_in);
+#endif
+	new = accept(sock, (void *)&conn->sock_addr, &addrlen);
+	if (new < 0)
+		return -1;
+
+	flags = fcntl(new, F_GETFL, 0);
+	if (flags == -1 || fcntl(new, F_SETFL, flags | O_NONBLOCK) == -1) {
+		printf("fcntl failed\n");
+		close(new);
+		return -1;
+	}
+
+	flags = 1;
+	if (setsockopt(new, IPPROTO_TCP, TCP_NODELAY, &flags, sizeof(flags)))
+		perror("setsockopt(TCP_NODELAY)"); /* not fatal */
+
+	return new;
 }
 
 static int new_connection(int csock)
@@ -835,6 +882,54 @@ static void main_loop(int csock)
 	}
 }
 
+static int listen_socket(int port)
+{
+	int s, optval;
+#ifdef HAVE_INET_NTOP
+	struct sockaddr_in6 sock_name;
+
+	memset(&sock_name, 0, sizeof(sock_name));
+	sock_name.sin6_family = AF_INET6;
+	sock_name.sin6_addr = in6addr_any;
+	sock_name.sin6_port = htons(port);
+
+	s = socket(AF_INET6, SOCK_STREAM, 0);
+	if (s == -1 && errno == EAFNOSUPPORT) {
+		/* fall back to ipv4 */
+		sock_name.sin6_family = AF_INET;
+		s = socket(AF_INET, SOCK_STREAM, 0);
+	}
+#else
+	struct sockaddr_in sock_name;
+
+	memset(&sock_name, 0, sizeof(sock_name));
+	sock_name.sin_family = AF_INET;
+	sock_name.sin_addr.s_addr = INADDR_ANY;
+	sock_name.sin_port = htons(port);
+
+	s = socket(AF_INET, SOCK_STREAM, 0);
+#endif
+	if (s == -1)
+		return -1;
+
+	optval = 1;
+	if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
+		       (char *)&optval, sizeof(optval)) == -1 ||
+	    bind(s, (struct sockaddr *)&sock_name, sizeof(sock_name)) == -1 ||
+	    listen(s, HTTP_BACKLOG) == -1) {
+		close(s);
+		return -1;
+	}
+
+	optval = fcntl(s, F_GETFL, 0);
+	if (optval == -1 || fcntl(s, F_SETFL, optval | O_NONBLOCK)) {
+		close(s);
+		return -1;
+	}
+
+	return s;
+}
+
 static void gohttpd(char *name)
 {
 	int csock, i;
@@ -871,7 +966,6 @@ static void gohttpd(char *name)
 	for (i = 0; i < max_conns; ++i) {
 		conns[i].status = 200;
 		conns[i].conn_n = i;
-		alloc_sock_addr(&conns[i]);
 	}
 
 	ufds = calloc(max_conns + 1, sizeof(struct pollfd));

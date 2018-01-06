@@ -10,7 +10,7 @@ CFLAGS += -Wall $(D:1=-g)
 
 ETAGS=`which etags || echo true`
 
-CFILES = gohttpd.c config.c log.c socket.c dir.c
+CFILES = gohttpd.c config.c log.c dir.c
 
 O := $(CFILES:.c=.o)
 
