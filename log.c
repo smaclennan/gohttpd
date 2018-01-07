@@ -20,7 +20,6 @@
 
 
 static FILE *log_fp;
-static char *log_name;
 static int need_reopen;
 
 static void sig_reopen(int sig)
@@ -33,19 +32,19 @@ static void log_reopen(void)
 	if (log_fp) {
 		fclose(log_fp);
 
-		log_fp = fopen(log_name, "a");
+		log_fp = fopen(logfile, "a");
 		if (log_fp == NULL)
-			syslog(LOG_ERR, "Reopen %s: %m", log_name);
+			syslog(LOG_ERR, "Reopen %s: %m", logfile);
 
 		syslog(LOG_WARNING, "Log file reopened.");
 	}
 }
 
-int log_open(char *logname)
+int log_open(void)
 {
-	log_fp = fopen(logname, "a");
+	log_fp = fopen(logfile, "a");
 	if (log_fp == NULL)
-		fatal_error("Unable to open %s: %m", logname);
+		fatal_error("Unable to open %s: %m", logfile);
 
 	if (fchown(fileno(log_fp), uid, gid))
 		perror("chown log file");
@@ -101,13 +100,13 @@ void log_hit(struct connection *conn, unsigned int status)
 	struct tm *t;
 	int n, len = sizeof(common);
 
-	if (!log_fp)
-		return; /* nowhere to write! */
-
 	if (need_reopen) {
 		log_reopen();
 		need_reopen = 0;
 	}
+
+	if (!log_fp)
+		return; /* nowhere to write! */
 
 	time(&now);
 	t = localtime(&now);

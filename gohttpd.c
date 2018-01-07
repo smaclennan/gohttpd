@@ -949,7 +949,7 @@ int main(int argc, char *argv[])
 	/* Now it is safe to install */
 	atexit(cleanup);
 
-	log_open(logfile);
+	log_open();
 
 	while (1) {
 		int timeout = head ? POLL_TIMEOUT : -1;
