@@ -36,7 +36,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#if defined(__linux__) || defined(__FreeBSD__)
 #define USE_SENDFILE
+#endif
 //#define HAVE_INET_NTOP
 
 /* If defined we allow directory listings */
