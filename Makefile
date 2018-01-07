@@ -29,7 +29,7 @@ QUIET_LINK    = $(Q:@=@echo    '     LINK     '$@;)
 
 #################
 
-all:	gohttpd
+all:	gohttpd gostats
 
 gohttpd: $O
 	$(QUIET_LINK)$(CC) -o $@ $O $(LIBS)
@@ -42,4 +42,4 @@ gohttpd: $O
 install: all
 
 clean:
-	rm -f *.o gohttpd TAGS
+	rm -f *.o gohttpd gostats TAGS

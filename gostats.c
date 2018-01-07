@@ -68,9 +68,3 @@ failed:
 	perror("connect");
 	exit(1);
 }
-
-/*
- * Local Variables:
- * compile-command: "gcc -O2 -Wall gostats.c -o gostats"
- * End:
- */
