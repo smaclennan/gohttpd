@@ -22,7 +22,9 @@
 #include <grp.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#ifdef __linux__
 #include <sys/sendfile.h>
+#endif
 
 static int verbose;
 
@@ -104,7 +106,7 @@ const char *ntoa(struct connection *conn)
 
 	return inet_ntop(sin->ss_family, sin, a, sizeof(a));
 #else
-	struct sockaddr_in *sin = (struct sockaddr_in *)conn->sock_addr;
+	struct sockaddr_in *sin = &conn->sock_addr;
 
 	return inet_ntoa(sin->sin_addr);
 #endif
@@ -757,6 +759,7 @@ static int write_request(struct connection *conn)
 
 #ifdef USE_SENDFILE
 	if (conn->in_fd >= 0) {
+#ifdef __linux__
 		n = sendfile(SOCKET(conn), conn->in_fd,
 			     &conn->in_offset, conn->len);
 		if (n > 0) {
@@ -771,6 +774,25 @@ static int write_request(struct connection *conn)
 			close_connection(conn, 408);
 			return 1;
 		}
+#elif defined(__FreeBSD__)
+		off_t o;
+
+		if (sendfile(conn->in_fd, SOCKET(conn), conn->in_offset, conn->len, NULL, &o, 0)) {
+			if (errno == EAGAIN)
+				return 0;
+
+			close_connection(conn, 408);
+			return 1;
+		}
+		if (o > 0) {
+			set_cork(SOCKET(conn), 0);
+			conn->len -= o;
+			if (conn->len > 0)
+				return 0;
+		}
+#else
+#error NO sendfile
+#endif
 	}
 #endif
 

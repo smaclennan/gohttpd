@@ -138,9 +138,6 @@ void read_config(char *fname)
 	if (pidfile == NULL)
 		pidfile  = must_strdup(HTTP_PIDFILE);
 
-	if (strlen(root_dir) >= PATH_MAX)
-		fatal_error("Root directory too long");
-
 	/* root_dir must be inside chroot_dir */
 	if (do_chroot && strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
 		fatal_error("%s not inside chroot %s", root_dir, chroot_dir);

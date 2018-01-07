@@ -31,10 +31,13 @@
 #include <sys/stat.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 
 #define USE_SENDFILE
+//#define HAVE_INET_NTOP
 
 /* If defined we allow directory listings */
 //#define ALLOW_DIR_LISTINGS
@@ -71,8 +74,6 @@
 
 #define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
 #define HTTP_LOG_CHROOT	"/logs/gohttpd.log"
-
-#define HAVE_INET_NTOP
 
 struct connection {
 	int conn_n;
