@@ -42,7 +42,7 @@
 //#define HAVE_INET_NTOP
 
 /* If defined we allow directory listings */
-//#define ALLOW_DIR_LISTINGS
+#define ALLOW_DIR_LISTINGS
 
 #define GOHTTPD_STR	"Apache"
 #define GOHTTPD_VERSION	"0.2"
@@ -89,10 +89,11 @@ struct connection {
 	off_t offset;
 	unsigned int len;
 	int   status;
-#ifdef USE_SENDFILE
-	struct iovec iovs[1];
-#elif defined(ALLOW_DIR_LISTINGS)
+#ifdef ALLOW_DIR_LISTINGS
 	struct iovec iovs[3];
+	char *dirbuf;
+#elif defined(USE_SENDFILE)
+	struct iovec iovs[1];
 #else
 	struct iovec iovs[2];
 #endif
@@ -123,6 +124,7 @@ struct connection {
 	struct connection *next;
 };
 
+int http_error(struct connection *conn, int status);
 const char *ntoa(struct connection *conn); /* helper */
 
 /* exported from log.c */

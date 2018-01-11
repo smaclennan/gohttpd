@@ -37,10 +37,6 @@ static time_t   started;
 static struct connection *conns, *head;
 static struct pollfd *ufds;
 
-#if defined(USE_SENDFILE) && defined(ALLOW_DIR_LISTINGS)
-#error Directory listings and sendfile are currently incompatible
-#endif
-
 /* SIGUSR1 is handled in log.c */
 static void sighandler(int signum)
 {
@@ -175,6 +171,12 @@ static void close_connection(struct connection *conn, int status)
 		free(conn->errorstr);
 		conn->errorstr = NULL;
 	}
+#ifdef ALLOW_DIR_LISTINGS
+	if (conn->dirbuf) {
+		free(conn->dirbuf);
+		conn->dirbuf = NULL;
+	}
+#endif
 
 	conn->status = 200;
 
@@ -400,7 +402,6 @@ static const char *msg_414 =
 static const char *msg_500 =
 	"An internal server error occurred. Try again later.";
 
-
 /* This is a very specialized build_response just for 301 errors. */
 static int http_error301(struct connection *conn, char *request)
 {
@@ -447,7 +448,7 @@ static int http_error301(struct connection *conn, char *request)
 }
 
 /* For all but 301 errors */
-static int http_error(struct connection *conn, int status)
+int http_error(struct connection *conn, int status)
 {
 	const char *title, *msg;
 	int n1;
@@ -472,6 +473,11 @@ static int http_error(struct connection *conn, int status)
 	case 500:
 		title = "500 Server Error";
 		msg = msg_500;
+		break;
+	case 503:
+		/* Actually a 500 error */
+		title = "500 Server Error";
+		msg = "Server out of memory.";
 		break;
 	default:
 		syslog(LOG_ERR, "Unknow error status %d", status);
@@ -731,7 +737,7 @@ static int write_request(struct connection *conn)
 			return 1;
 		}
 
-#ifdef USE_SENDFILE
+#if defined(USE_SENDFILE) && !defined(ALLOW_DIR_LISTINGS)
 		/* Normal case only one iov */
 		if (unlikely(n < conn->iovs->iov_len)) {
 			conn->iovs->iov_len -= n;

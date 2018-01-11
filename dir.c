@@ -19,10 +19,6 @@
 #include "gohttpd.h"
 
 #ifdef ALLOW_DIR_LISTINGS
-#ifdef USE_SENDFILE
-#error ALLOW_DIR_LISTINGS does not support sendfile
-#endif
-
 #include <dirent.h>
 
 /* SAM HACK FOR NOW */
@@ -86,18 +82,19 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 
 	free(namelist);
 
-	conn->buf = (unsigned char *)strdup(dirbuf);
-
-	if (conn->buf) {
-		conn->iovs[1].iov_base = conn->buf;
-		conn->iovs[1].iov_len  = n;
+	conn->dirbuf = strdup(dirbuf);
+	if (!conn->dirbuf) {
+		http_error(conn, 503);
+		return ENOMEM;
 	}
+
+	conn->iovs[1].iov_base = conn->dirbuf;
+	conn->iovs[1].iov_len  = n;
 
 	conn->iovs[2].iov_base = (void *)trailer;
 	conn->iovs[2].iov_len = strlen(trailer); // SAM
 
 	conn->len = conn->iovs[1].iov_len + conn->iovs[2].iov_len;
-	conn->status = 200;
 
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = snprintf(conn->http_header,
@@ -109,8 +106,8 @@ int do_dir(struct connection *conn, int fd, const char *dirname)
 					  conn->len);
 
 	conn->len += conn->iovs[0].iov_len;
-
 	conn->n_iovs = 3;
+	conn->status = 200;
 
 	return 0;
 }
