@@ -647,6 +647,16 @@ int http_get(struct connection *conn)
 	return rc;
 }
 
+static void dump_overflow(struct connection *conn)
+{
+	FILE *fp = fopen("/logs/overflow.log", "a");
+	if (fp) {
+		fprintf(fp, "OF: %s\n", conn->cmd);
+		fclose(fp);
+	} else
+		syslog(LOG_INFO, "Overflow error: %m");
+}
+
 static int read_request(struct connection *conn)
 {
 	int n;
@@ -680,7 +690,8 @@ static int read_request(struct connection *conn)
 
 	if (conn->cmd[conn->offset - 1] != '\n') {
 		if (conn->offset >= MAX_LINE) {
-			syslog(LOG_WARNING, "Line overflow");
+			// SAM DBG syslog(LOG_WARNING, "Line overflow");
+			dump_overflow(conn); // SAM DBG
 			if (strncmp(conn->cmd, "GET ",  4) == 0 ||
 			    strncmp(conn->cmd, "HEAD ", 5) == 0)
 				return http_error(conn, 414);
