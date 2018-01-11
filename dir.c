@@ -29,7 +29,7 @@ static const char *header =
 	"<html lang=\"en\">\n"
 	"<head>\n"
 	"<meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\">\n"
-	"<style>body { margin: 1em 8% 0 8%; font-size: medium; }</style>\n"
+	"<style>body { margin: 1em 10% 0 10%; font-size: medium; }</style>\n"
 	"<title>Index of %s</title>\n"
 	"</head>\n"
 	"<body bgcolor=\"#C0C0C0\">"
