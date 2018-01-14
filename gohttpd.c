@@ -756,7 +756,6 @@ static int write_request(struct connection *conn)
 			time(&conn->access);
 			return 0;
 		}
-		conn->n_iovs = 0;
 #else
 		struct iovec *iov;
 		int i;
@@ -772,6 +771,7 @@ static int write_request(struct connection *conn)
 				return 0;
 			}
 #endif
+		conn->n_iovs = 0;
 	}
 
 #ifdef USE_SENDFILE
