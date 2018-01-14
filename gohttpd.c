@@ -688,10 +688,12 @@ static int read_request(struct connection *conn)
 	/* We alloced an extra space for the '\0' */
 	conn->cmd[conn->offset] = '\0';
 
+	if (conn->offset >= MAX_LINE) // SAM DBG
+		dump_overflow(conn); // SAM DBG
+
 	if (conn->cmd[conn->offset - 1] != '\n') {
 		if (conn->offset >= MAX_LINE) {
-			// SAM DBG syslog(LOG_WARNING, "Line overflow");
-			dump_overflow(conn); // SAM DBG
+			syslog(LOG_WARNING, "Line overflow");
 			if (strncmp(conn->cmd, "GET ",  4) == 0 ||
 			    strncmp(conn->cmd, "HEAD ", 5) == 0)
 				return http_error(conn, 414);
