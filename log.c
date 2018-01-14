@@ -75,30 +75,10 @@ static char *trim_str(char *str, int skip)
 	return str;
 }
 
-static void add_combined_log(struct connection *conn,
-			     char *common, char *request, unsigned int status)
-{	/* This is 500 + hostname chars max */
-	char *referer, *agent;
-	int n;
-
-	referer = trim_str(conn->referer, 8);
-	agent = trim_str(conn->user_agent, 12);
-
-	do {
-		n = fprintf(log_fp,
-			    "%s /%.200s\" %u %u \"%.100s\" \"%.100s\"\n",
-			    common, request, status, conn->len,
-			    referer, agent);
-	} while (n < 0 && errno == EINTR);
-}
-
-/* Common log file format */
+/* Combined log file format */
 void log_hit(struct connection *conn, unsigned int status)
 {
-	char common[100], *p = common;
-	time_t now;
-	struct tm *t;
-	int n, len = sizeof(common);
+	char date[32];
 
 	if (need_reopen) {
 		log_reopen();
@@ -108,29 +88,20 @@ void log_hit(struct connection *conn, unsigned int status)
 	if (!log_fp)
 		return; /* nowhere to write! */
 
-	time(&now);
-	t = localtime(&now);
+	/* We must use localtime_r()... localtime will reset the
+	 * timezone to UTC in a chroot jail.
+	 */
+	struct tm result;
+	time_t now = time(NULL);
+	strftime(date, sizeof(date), "[%d/%b/%Y:%T %z]", localtime_r(&now, &result));
 
-	/* Get some of the fixed length common stuff out of the way */
-	n = snprintf(p, len, "%s", ntoa(conn));
-	p += n;
-	len -= n;
-	n = strftime(p, len, " - - [%d/%b/%Y:%T %z] \"", t);
-	p += n;
-	len -= n;
-	snprintf(p, len, "%s", conn->http == HTTP_HEAD ? "HEAD" : "GET");
+	char *referer = trim_str(conn->referer, 8);
+	char *agent = trim_str(conn->user_agent, 12);
 
-	char *request;
-
-	/* SAM Save this? */
-	request = conn->cmd;
-	request += 4;
-	while (isspace((int)*request))
-		++request;
-	if (*request == '/')
-		++request;
-
-	add_combined_log(conn, common, request, status);
+	while (fprintf(log_fp,
+		       "%s - - %s \"%.200s\" %u %u \"%.100s\" \"%.100s\"\n",
+		       ntoa(conn), date, conn->cmd, conn->status, conn->len,
+		       referer, agent) < 0 && errno == EINTR) ;
 
 	fflush(log_fp);
 }

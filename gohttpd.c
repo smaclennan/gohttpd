@@ -949,6 +949,8 @@ int main(int argc, char *argv[])
 	if (chdir(root_dir))
 		fatal_error("%s: %m", root_dir);
 
+	tzset(); /* set the timezone before chroot */
+
 	/* Must setup privileges before chroot */
 	setup_privs();
 
