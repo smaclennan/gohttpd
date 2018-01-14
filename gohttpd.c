@@ -108,6 +108,80 @@ const char *ntoa(struct connection *conn)
 #endif
 }
 
+static void close_connection(struct connection *conn, int status); // SAM DBG
+
+static void reset_connection(struct connection *conn)
+{
+	char *p;
+
+#ifdef PERSIST
+	if (verbose > 2)
+		printf("Reset request\n");
+
+	++conn->persist; // SAM DBG
+	if (conn->persist >= 10) {
+		printf("TOO MANY REQUESTS!\n");
+		close_connection(conn, conn->status);
+	}
+#endif
+
+	/* Make sure we have a clean cmd */
+	for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
+		;
+	*p = '\0';
+
+#ifdef SAM_WHY
+	if (strncmp(conn->cmd, "GET ", 4) == 0 ||
+	    strncmp(conn->cmd, "HEAD ", 5) == 0)
+		conn->http = 1;
+#endif
+
+	/* Log hits in one place. Do not log stat requests. */
+	if (conn->status != 1000)
+		log_hit(conn, conn->status);
+
+#ifdef USE_SENDFILE
+	if (conn->in_fd >= 0) {
+		close(conn->in_fd);
+		conn->in_fd = -1;
+		conn->in_offset = 0;
+	}
+#else
+	if (conn->buf) {
+		if (conn->mapped) {
+			mmap_release(conn);
+			conn->mapped = 0;
+		} else
+			free(conn->buf);
+		conn->buf = NULL;
+	}
+#endif
+
+	conn->len = conn->offset = 0;
+
+	conn->http = 0;
+	conn->referer = NULL;
+	conn->user_agent = NULL;
+	*conn->cmd = 0;
+	if (conn->errorstr) {
+		free(conn->errorstr);
+		conn->errorstr = NULL;
+	}
+#ifdef ALLOW_DIR_LISTINGS
+	if (conn->dirbuf) {
+		free(conn->dirbuf);
+		conn->dirbuf = NULL;
+	}
+#endif
+
+	conn->status = 200;
+
+	memset(conn->iovs, 0, sizeof(conn->iovs));
+
+	time(&conn->access);
+	conn->ufd->events = POLLIN;
+}
+
 static void close_connection(struct connection *conn, int status)
 {
 	char *p;
@@ -115,6 +189,8 @@ static void close_connection(struct connection *conn, int status)
 
 	if (verbose > 2)
 		printf("Close request\n");
+
+	conn->status = status;
 
 	for (c = head; c; prev = c, c = c->next)
 		if (c == conn) {
@@ -517,7 +593,11 @@ static int http_build_response(struct connection *conn)
 	return snprintf(conn->http_header, sizeof(conn->http_header),
 			"HTTP/1.1 200 OK\r\n"
 			SERVER_STR
+#ifdef PERSIST
+			"Connection: keep-alive\r\n"
+#else
 			"Connection: close\r\n"
+#endif
 			"Content-Length: %d\r\n\r\n", conn->len);
 }
 
@@ -606,6 +686,9 @@ int http_get(struct connection *conn)
 	/* Save these up front for logging */
 	conn->referer = strstr(e, "Referer:");
 	conn->user_agent = strstr(e, "User-Agent:");
+#ifdef PERSIST
+	conn->persist = strcasestr(e, "Connection: keep-alive") != NULL;
+#endif
 
 	if (*request) {
 		snprintf(dirname, sizeof(dirname) - 20, "%s", request);
@@ -665,6 +748,8 @@ static int read_request(struct connection *conn)
 		n = read(SOCKET(conn), conn->cmd + conn->offset,
 			 MAX_LINE - conn->offset);
 	while (n < 0 && errno == EINTR);
+
+	printf("read %d\n", n); // SAM DBG
 
 	if (n < 0) {
 		if (errno == EAGAIN) {
@@ -815,7 +900,10 @@ static int write_request(struct connection *conn)
 	}
 #endif
 
-	close_connection(conn, conn->status);
+	if (conn->persist && conn->status == 200)
+		reset_connection(conn);
+	else
+		close_connection(conn, conn->status);
 
 	return 0;
 }

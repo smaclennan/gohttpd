@@ -19,6 +19,7 @@
 #ifndef _GOHTTPD_H_
 #define _GOHTTPD_H_
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,6 +41,8 @@
 #define USE_SENDFILE
 #endif
 //#define HAVE_INET_NTOP
+
+#define PERSIST
 
 /* If defined we allow directory listings */
 #define ALLOW_DIR_LISTINGS
@@ -113,6 +116,7 @@ struct connection {
 	int http;
 #define	HTTP_GET	1
 #define HTTP_HEAD	2
+	int persist;
 	char *user_agent; /* combined log only */
 	char *referer;    /* combined log only */
 	/* The http_header needs to be big enough to store an http
