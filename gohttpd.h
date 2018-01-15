@@ -65,7 +65,7 @@
  * connection has been idle for more than `timeout', we close the
  * connection.
  */
-#define POLL_TIMEOUT	100000	/* milliseconds */
+#define POLL_TIMEOUT	1000	/* milliseconds */
 
 #define HTTP_ROOT	"/var/www/htdocs"
 #define HTTP_CHROOT	"/var/www"
