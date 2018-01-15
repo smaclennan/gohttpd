@@ -108,37 +108,25 @@ const char *ntoa(struct connection *conn)
 #endif
 }
 
-static void close_connection(struct connection *conn, int status); // SAM DBG
-
+/* Reset, but do not close, the connection or remove it from the
+ * connection list. This is called during persistent connection to
+ * cleanup for the next request and does the bulk of the work for
+ * close_connection().
+ */
 static void reset_connection(struct connection *conn)
 {
 	char *p;
 
-#ifdef PERSIST
-	if (verbose > 2)
-		printf("Reset request\n");
-
-	++conn->persist; // SAM DBG
-	if (conn->persist >= 10) {
-		printf("TOO MANY REQUESTS!\n");
-		close_connection(conn, conn->status);
-	}
-#endif
+	if (verbose > 1)
+		printf("%d: Reset request\n", conn->conn_n);
 
 	/* Make sure we have a clean cmd */
 	for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
 		;
 	*p = '\0';
 
-#ifdef SAM_WHY
-	if (strncmp(conn->cmd, "GET ", 4) == 0 ||
-	    strncmp(conn->cmd, "HEAD ", 5) == 0)
-		conn->http = 1;
-#endif
-
-	/* Log hits in one place. Do not log stat requests. */
-	if (conn->status != 1000)
-		log_hit(conn, conn->status);
+	/* Log hits in one place. */
+	log_hit(conn);
 
 #ifdef USE_SENDFILE
 	if (conn->in_fd >= 0) {
@@ -184,13 +172,14 @@ static void reset_connection(struct connection *conn)
 
 static void close_connection(struct connection *conn, int status)
 {
-	char *p;
 	struct connection *c, *prev = NULL;
 
-	if (verbose > 2)
-		printf("Close request\n");
-
 	conn->status = status;
+	reset_connection(conn);
+	conn->persist = 0;
+
+	if (verbose > 1)
+		printf("%d: Close request\n", conn->conn_n);
 
 	for (c = head; c; prev = c, c = c->next)
 		if (c == conn) {
@@ -201,64 +190,11 @@ static void close_connection(struct connection *conn, int status)
 			break;
 		}
 
-	/* Make sure we have a clean cmd */
-	for (p = conn->cmd; *p && *p != '\r' && *p != '\n'; ++p)
-		;
-	*p = '\0';
-
-	if (strncmp(conn->cmd, "GET ", 4) == 0 ||
-	    strncmp(conn->cmd, "HEAD ", 5) == 0)
-		conn->http = 1;
-
-	/* Log hits in one place. Do not log stat requests. */
-	if (status != 1000)
-		log_hit(conn, status);
-
-#ifdef USE_SENDFILE
-	if (conn->in_fd >= 0) {
-		close(conn->in_fd);
-		conn->in_fd = -1;
-		conn->in_offset = 0;
-	}
-#else
-	if (conn->buf) {
-		if (conn->mapped) {
-			mmap_release(conn);
-			conn->mapped = 0;
-		} else
-			free(conn->buf);
-		conn->buf = NULL;
-	}
-#endif
-
-	conn->len = conn->offset = 0;
-
 	if (SOCKET(conn) >= 0) {
 		close(SOCKET(conn));
 		conn->ufd->fd = -1;
 		conn->ufd->revents = 0;
 	}
-
-	conn->http = 0;
-	conn->referer = NULL;
-	conn->user_agent = NULL;
-	*conn->cmd = 0;
-	if (conn->errorstr) {
-		free(conn->errorstr);
-		conn->errorstr = NULL;
-	}
-#ifdef ALLOW_DIR_LISTINGS
-	if (conn->dirbuf) {
-		free(conn->dirbuf);
-		conn->dirbuf = NULL;
-	}
-#endif
-
-	conn->status = 200;
-
-	memset(conn->iovs, 0, sizeof(conn->iovs));
-
-	ufds[0].events = POLLIN; /* in case we throttled */
 }
 
 static void cleanup(void)
@@ -364,6 +300,9 @@ static int new_connection(int csock)
 		/* add to in use list */
 		conn->next = head;
 		head = conn;
+
+		if (verbose > 1)
+			printf("%d: NEW connection\n", conn->conn_n);
 	}
 }
 
@@ -748,8 +687,6 @@ static int read_request(struct connection *conn)
 		n = read(SOCKET(conn), conn->cmd + conn->offset,
 			 MAX_LINE - conn->offset);
 	while (n < 0 && errno == EINTR);
-
-	printf("read %d\n", n); // SAM DBG
 
 	if (n < 0) {
 		if (errno == EAGAIN) {
