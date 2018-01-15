@@ -42,8 +42,6 @@
 #endif
 //#define HAVE_INET_NTOP
 
-#define PERSIST
-
 /* If defined we allow directory listings */
 #define ALLOW_DIR_LISTINGS
 
@@ -64,11 +62,10 @@
  * Every connection has a `last access time' associated with it. An
  * access is a new connection, a read, or a write. When we have been
  * idle for POLL_TIMEOUT, we check all the connections. If a
- * connection has been idle for more than MAX_IDLE_TIME, we close the
+ * connection has been idle for more than `timeout', we close the
  * connection.
  */
-#define POLL_TIMEOUT	1000	/* milliseconds */
-#define MAX_IDLE_TIME	60	/* seconds */
+#define POLL_TIMEOUT	100000	/* milliseconds */
 
 #define HTTP_ROOT	"/var/www/htdocs"
 #define HTTP_CHROOT	"/var/www"
@@ -148,6 +145,8 @@ extern uid_t uid;
 extern gid_t gid;
 extern int   max_conns;
 extern int   do_chroot;
+extern int   persist;
+extern int   timeout;
 
 void read_config(char *fname);
 void fatal_error(const char *msg, ...);

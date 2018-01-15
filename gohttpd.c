@@ -346,15 +346,12 @@ static void check_old_connections(void)
 	int i;
 	time_t checkpoint;
 
-	checkpoint = time(NULL) - MAX_IDLE_TIME;
+	checkpoint = time(NULL) - timeout;
 
 	/* Do not close the listen socket */
 	for (c = conns, i = 0; i < max_conns; ++i, ++c)
-		if (SOCKET(c) >= 0 && c->access < checkpoint) {
-			syslog(LOG_WARNING,
-			       "%s: Killing idle connection.", ntoa(c));
+		if (SOCKET(c) >= 0 && c->access < checkpoint)
 			close_connection(c, 408);
-		}
 }
 
 static void create_pidfile(char *fname)
@@ -532,12 +529,10 @@ static int http_build_response(struct connection *conn)
 	return snprintf(conn->http_header, sizeof(conn->http_header),
 			"HTTP/1.1 200 OK\r\n"
 			SERVER_STR
-#ifdef PERSIST
-			"Connection: keep-alive\r\n"
-#else
-			"Connection: close\r\n"
-#endif
-			"Content-Length: %d\r\n\r\n", conn->len);
+			"Connection: %s\r\n"
+			"Content-Length: %d\r\n\r\n",
+			persist ? "keep-alive" : "close",
+			conn->len);
 }
 
 static int do_file(struct connection *conn, int fd)
@@ -625,9 +620,8 @@ int http_get(struct connection *conn)
 	/* Save these up front for logging */
 	conn->referer = strstr(e, "Referer:");
 	conn->user_agent = strstr(e, "User-Agent:");
-#ifdef PERSIST
-	conn->persist = strcasestr(e, "Connection: keep-alive") != NULL;
-#endif
+	if (persist)
+		conn->persist = strcasestr(e, "Connection: keep-alive") != NULL;
 
 	if (*request) {
 		snprintf(dirname, sizeof(dirname) - 20, "%s", request);
@@ -695,12 +689,12 @@ static int read_request(struct connection *conn)
 		}
 
 		syslog(LOG_WARNING, "Read error (%d): %m", errno);
-		close_connection(conn, 408);
+		close_connection(conn, 400);
 		return 1;
 	}
 	if (n == 0) {
 		syslog(LOG_WARNING, "Read: unexpected EOF");
-		close_connection(conn, 408);
+		close_connection(conn, 400);
 		return 1;
 	}
 
@@ -763,12 +757,12 @@ static int write_request(struct connection *conn)
 				return 0;
 
 			syslog(LOG_ERR, "writev: %m");
-			close_connection(conn, 408);
+			close_connection(conn, 400);
 			return 1;
 		}
 		if (n == 0) {
 			syslog(LOG_ERR, "writev unexpected EOF");
-			close_connection(conn, 408);
+			close_connection(conn, 400);
 			return 1;
 		}
 
@@ -812,7 +806,7 @@ static int write_request(struct connection *conn)
 			if (errno == EAGAIN)
 				return 0;
 
-			close_connection(conn, 408);
+			close_connection(conn, 400);
 			return 1;
 		}
 #elif defined(__FreeBSD__)
@@ -822,7 +816,7 @@ static int write_request(struct connection *conn)
 			if (errno == EAGAIN)
 				return 0;
 
-			close_connection(conn, 408);
+			close_connection(conn, 400);
 			return 1;
 		}
 		if (o > 0) {

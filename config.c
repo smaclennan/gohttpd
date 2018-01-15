@@ -28,8 +28,10 @@ int   port = HTTP_PORT;
 char *user = HTTP_USER;
 uid_t uid  = -1;
 gid_t gid  = -1;
-int   max_conns     = 25;
-int   do_chroot     = -1;
+int   max_conns = 25;
+int   do_chroot = -1;
+int   persist;
+int   timeout = 60; /* seconds */
 
 void fatal_error(const char *msg, ...)
 {
@@ -116,6 +118,10 @@ void read_config(char *fname)
 				must_strtol(val, &max_conns);
 			else if (strcmp(key, "chroot") == 0)
 				must_strtol(val, &do_chroot);
+			else if (strcmp(key, "persist") == 0)
+				must_strtol(val, &persist);
+			else if (strcmp(key, "timeout") == 0)
+				must_strtol(val, &timeout);
 			else
 				fatal_error("Unknown config '%s'", key);
 		}
