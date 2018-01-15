@@ -76,7 +76,7 @@ static char *trim_str(char *str, int skip)
 }
 
 /* Combined log file format */
-void log_hit(struct connection *conn, unsigned int status)
+void log_hit(struct connection *conn)
 {
 	char date[32];
 
@@ -87,6 +87,9 @@ void log_hit(struct connection *conn, unsigned int status)
 
 	if (!log_fp)
 		return; /* nowhere to write! */
+
+	if (conn->status == 1000)
+		return; /* don't log stat calls */
 
 	/* We must use localtime_r()... localtime will reset the
 	 * timezone to UTC in a chroot jail.
