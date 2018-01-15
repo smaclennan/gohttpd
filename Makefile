@@ -35,6 +35,9 @@ gohttpd: $O
 	$(QUIET_LINK)$(CC) -o $@ $O $(LIBS)
 	@$(ETAGS) $(CFILES) *.h
 
+gostats: gostats.c
+	$(QUIET_LINK)$(CC) -o $@ $<
+
 # Make all c files depend on all .h files
 *.o: *.h
 
@@ -42,4 +45,4 @@ gohttpd: $O
 install: all
 
 clean:
-	rm -f *.o gohttpd gostats TAGS
+	$(RM) *.o gohttpd gostats TAGS
