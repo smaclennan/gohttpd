@@ -693,8 +693,8 @@ static int read_request(struct connection *conn)
 		return 1;
 	}
 	if (n == 0) {
-		syslog(LOG_WARNING, "Read: unexpected EOF");
-		close_connection(conn, 400);
+		/* Log this as 418 rather than a syslog message */
+		close_connection(conn, 418); /* I'm a teapot */
 		return 1;
 	}
 
@@ -708,16 +708,8 @@ static int read_request(struct connection *conn)
 		dump_overflow(conn); // SAM DBG
 
 	if (conn->cmd[conn->offset - 1] != '\n') {
-		if (conn->offset >= MAX_LINE) {
-			syslog(LOG_WARNING, "Line overflow");
-			if (strncmp(conn->cmd, "GET ",  4) == 0 ||
-			    strncmp(conn->cmd, "HEAD ", 5) == 0)
-				return http_error(conn, 414);
-			else {
-				close_connection(conn, 414);
-				return 1;
-			}
-		}
+		if (conn->offset >= MAX_LINE)
+			return http_error(conn, 413);
 		return 0; /* not an error */
 	}
 
