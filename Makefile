@@ -41,8 +41,11 @@ gostats: gostats.c
 # Make all c files depend on all .h files
 *.o: *.h
 
-# SAM not done
 install: all
+	install -D -m644 logrotate.gohttpd ${DESTDIR}/etc/logrotate.d/gohttpd
+	install -D rc.gohttpd ${DESTDIR}/etc/rc.d/rc.gohttpd
+	install -D -s gohttpd ${DESTDIR}/usr/sbin/gohttpd
+	install -D -s gostats ${DESTDIR}/usr/bin/gostats
 
 clean:
 	$(RM) *.o gohttpd gostats TAGS
