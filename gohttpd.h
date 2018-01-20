@@ -151,8 +151,6 @@ extern int   timeout;
 void read_config(char *fname);
 void fatal_error(const char *msg, ...);
 
-int do_dir(struct connection *conn, int fd, const char *dirname);
-
 #define SOCKET(c)	((c)->ufd->fd)
 
 #define set_writeable(c) ((c)->ufd->events = POLLOUT)

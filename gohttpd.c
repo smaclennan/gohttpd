@@ -626,7 +626,7 @@ static int is_image(const char *fname)
 	return 0;
 }
 
-int do_dir(struct connection *conn, int fd, const char *dirname)
+static int do_dir(struct connection *conn, int fd, const char *dirname)
 {
 	int n;
 	struct stat sbuf;
