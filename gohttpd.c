@@ -46,7 +46,6 @@ static void sighandler(int signum)
 	case SIGINT:
 		/* Somebody wants us to quit */
 		syslog(LOG_INFO, "gohttpd stopping.");
-		log_close();
 		exit(0);
 	case SIGPIPE:
 		/* We get a SIGPIPE if the client closes the

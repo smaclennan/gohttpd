@@ -35,8 +35,8 @@ static void log_reopen(void)
 		log_fp = fopen(logfile, "a");
 		if (log_fp == NULL)
 			syslog(LOG_ERR, "Reopen %s: %m", logfile);
-
-		syslog(LOG_WARNING, "Log file reopened.");
+		else
+			syslog(LOG_WARNING, "Log file reopened.");
 	}
 }
 
@@ -109,14 +109,6 @@ void log_hit(struct connection *conn)
 	fflush(log_fp);
 }
 
-
-void log_close(void)
-{
-	if (log_fp) {
-		(void)fclose(log_fp);
-		log_fp = NULL;
-	}
-}
 
 /*
  * Local Variables:

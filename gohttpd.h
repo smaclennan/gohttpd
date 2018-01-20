@@ -131,7 +131,6 @@ const char *ntoa(struct connection *conn); /* helper */
 /* exported from log.c */
 int  log_open(void);
 void log_hit(struct connection *conn);
-void log_close(void);
 
 /* exported from config.c */
 extern char *config;
