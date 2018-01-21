@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <netinet/tcp.h>
+#include <netinet/in.h>
 #include <netdb.h>
 
 /* Trivial program to get stats from gohttpd where you don't have (or

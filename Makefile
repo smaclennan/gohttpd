@@ -48,4 +48,4 @@ install: all
 	install -D -s gostats ${DESTDIR}/usr/bin/gostats
 
 clean:
-	$(RM) *.o gohttpd gostats TAGS
+	rm -f *.o gohttpd gostats TAGS
