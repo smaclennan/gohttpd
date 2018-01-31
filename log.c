@@ -78,7 +78,7 @@ static char *trim_str(char *str, int skip)
 /* Combined log file format */
 void log_hit(struct connection *conn)
 {
-	char date[32];
+	char date[32], *p;
 
 	if (need_reopen) {
 		log_reopen();
@@ -100,6 +100,11 @@ void log_hit(struct connection *conn)
 
 	char *referer = trim_str(conn->referer, 8);
 	char *agent = trim_str(conn->user_agent, 12);
+
+	/* sanitize the command */
+	for (p = conn->cmd; *p; ++p)
+		if (!isprint(*p) || *p == '"')
+			*p = '~';
 
 	while (fprintf(log_fp,
 		       "%s - - %s \"%.200s\" %u %u \"%.100s\" \"%.100s\"\n",
