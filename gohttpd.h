@@ -125,27 +125,6 @@ struct connection {
 	struct connection *next;
 };
 
-int http_error(struct connection *conn, int status);
-const char *ntoa(struct connection *conn); /* helper */
-
-/* exported from config.c */
-extern char *config;
-extern char *root_dir;
-extern char *chroot_dir;
-extern char *logfile;
-extern char *pidfile;
-extern int   port;
-extern char *user;
-extern uid_t uid;
-extern gid_t gid;
-extern int   max_conns;
-extern int   do_chroot;
-extern int   persist;
-extern int   timeout;
-
-void read_config(char *fname);
-void fatal_error(const char *msg, ...);
-
 #define SOCKET(c)	((c)->ufd->fd)
 
 #define set_writeable(c) ((c)->ufd->events = POLLOUT)

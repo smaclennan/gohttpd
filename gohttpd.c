@@ -18,6 +18,7 @@
  */
 #include "gohttpd.h"
 
+#include <stdarg.h>
 #include <pwd.h>
 #include <grp.h>
 #include <fcntl.h>
@@ -27,6 +28,20 @@
 #endif
 
 static int verbose;
+
+static char *root_dir;
+static char *chroot_dir;
+static char *logfile;
+static char *pidfile;
+
+static int   port = HTTP_PORT;
+static char *user = HTTP_USER;
+static uid_t uid  = -1;
+static gid_t gid  = -1;
+static int   max_conns = 25;
+static int   do_chroot = -1;
+static int   persist;
+static int   timeout = 60; /* seconds */
 
 /* Stats */
 static unsigned int max_requests;
@@ -98,7 +113,7 @@ static void mmap_release(struct connection *conn)
 #endif
 
 /* network byte order */
-const char *ntoa(struct connection *conn)
+static const char *ntoa(struct connection *conn)
 {
 #ifdef HAVE_INET_NTOP
 	static char a[64];
@@ -110,6 +125,17 @@ const char *ntoa(struct connection *conn)
 
 	return inet_ntoa(sin->sin_addr);
 #endif
+}
+
+static void fatal_error(const char *msg, ...)
+{
+	va_list ap;
+
+	va_start(ap, msg);
+	vsyslog(LOG_ERR, msg, ap);
+	va_end(ap);
+	puts(msg);
+	exit(1);
 }
 
 static void log_reopen(void)
@@ -549,7 +575,7 @@ static int http_error301(struct connection *conn, char *request)
 }
 
 /* For all but 301 errors */
-int http_error(struct connection *conn, int status)
+static int http_error(struct connection *conn, int status)
 {
 	const char *title, *msg;
 	int n1;
@@ -1113,6 +1139,111 @@ static int listen_socket(int port)
 	}
 
 	return s;
+}
+
+/* If we are already out of memory, we are in real trouble */
+static char *must_strdup(char *str)
+{
+	char *new = strdup(str);
+
+	if (!new)
+		fatal_error("read_config: out of memory");
+	return new;
+}
+
+/* only set if a number specified */
+static void must_strtol(char *str, int *value)
+{
+	char *end;
+	long n = strtol(str, &end, 0);
+
+	if (str != end)
+		*value = (int)n;
+}
+
+static void read_config(char *fname)
+{
+	FILE *fp;
+	char line[100];
+
+	if (!fname)
+		fname = HTTP_CONFIG;
+
+	/* These values must be malloced */
+	user = must_strdup(user);
+
+	fp = fopen(fname, "r");
+	if (fp) {
+		while (fgets(line, sizeof(line), fp)) {
+			if (!isalpha(*line))
+				continue;
+
+			char *key = strtok(line, "=");
+			char *val = strtok(NULL, "\r\n");
+
+			if (!key || !val)
+				fatal_error("Bad line '%s'", line);
+
+			if (strcmp(key, "root") == 0 ||
+			    strcmp(key, "root-dir") == 0) {
+				if (root_dir)
+					free(root_dir);
+				root_dir = must_strdup(val);
+			} else if (strcmp(key, "chroot-dir") == 0) {
+				if (chroot_dir)
+					free(chroot_dir);
+				chroot_dir = must_strdup(val);
+			} else if (strcmp(key, "logfile") == 0) {
+				if (logfile)
+					free(logfile);
+				logfile = must_strdup(val);
+			} else if (strcmp(key, "pidfile") == 0) {
+				if (pidfile)
+					free(pidfile);
+				pidfile = must_strdup(val);
+			} else if (strcmp(key, "port") == 0)
+				must_strtol(val, &port);
+			else if (strcmp(key, "user") == 0) {
+				if (user)
+					free(user);
+				user = must_strdup(val);
+			} else if (strcmp(key, "uid") == 0)
+				must_strtol(val, (int *)&uid);
+			else if (strcmp(key, "gid") == 0)
+				must_strtol(val, (int *)&gid);
+			else if (strcmp(key, "max-connections") == 0)
+				must_strtol(val, &max_conns);
+			else if (strcmp(key, "chroot") == 0)
+				must_strtol(val, &do_chroot);
+			else if (strcmp(key, "persist") == 0)
+				must_strtol(val, &persist);
+			else if (strcmp(key, "timeout") == 0)
+				must_strtol(val, &timeout);
+			else
+				fatal_error("Unknown config '%s'", key);
+		}
+
+		fclose(fp);
+	} else if (errno != ENOENT)
+		fatal_error("%s: %m", fname);
+
+	if (do_chroot == -1)
+		do_chroot = getuid() == 0;
+
+	/* Default'em */
+	if (root_dir == NULL)
+		root_dir = must_strdup(HTTP_ROOT);
+	if (chroot_dir == NULL)
+		chroot_dir = must_strdup(HTTP_CHROOT);
+	if (logfile == NULL)
+		logfile  =
+			must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
+	if (pidfile == NULL)
+		pidfile  = must_strdup(HTTP_PIDFILE);
+
+	/* root_dir must be inside chroot_dir */
+	if (do_chroot && strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
+		fatal_error("%s not inside chroot %s", root_dir, chroot_dir);
 }
 
 int main(int argc, char *argv[])
