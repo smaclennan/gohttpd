@@ -9,14 +9,11 @@ CFLAGS += -Wall $(D:1=-g)
 
 ETAGS=`which etags || echo true`
 
-all:	gohttpd gostats
+all:	gohttpd
 
 gohttpd: gohttpd.c
 	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
 	@$(ETAGS) gohttpd.c
-
-gostats: gostats.c
-	$(CC) $(CFLAGS) -o $@ $<
 
 install: all
 	install -D -m644 logrotate.gohttpd ${DESTDIR}/etc/logrotate.d/gohttpd
@@ -25,4 +22,4 @@ install: all
 	install -D -s gostats ${DESTDIR}/usr/bin/gostats
 
 clean:
-	rm -f gohttpd gostats TAGS
+	rm -f gohttpd gostats TAGS valgrind.out

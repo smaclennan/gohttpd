@@ -1,5 +1,3 @@
-*.o
 gohttpd
-gostats
 TAGS
 valgrind.out
