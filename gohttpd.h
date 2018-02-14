@@ -128,10 +128,6 @@ struct connection {
 int http_error(struct connection *conn, int status);
 const char *ntoa(struct connection *conn); /* helper */
 
-/* exported from log.c */
-int  log_open(void);
-void log_hit(struct connection *conn);
-
 /* exported from config.c */
 extern char *config;
 extern char *root_dir;
