@@ -16,16 +16,120 @@
  * the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
  * Boston, MA 02111-1307, USA.
  */
-#include "gohttpd.h"
-
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include <errno.h>
+#include <syslog.h>
+#include <signal.h>
+#include <ctype.h>
 #include <pwd.h>
 #include <grp.h>
 #include <fcntl.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/poll.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+#include <netinet/tcp.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #ifdef __linux__
 #include <sys/sendfile.h>
 #endif
+
+#if defined(__linux__) || defined(__FreeBSD__)
+#define USE_SENDFILE
+#endif
+//#define HAVE_INET_NTOP
+
+/* If defined we allow directory listings */
+#define ALLOW_DIR_LISTINGS
+
+#define GOHTTPD_STR	"Apache"
+#define GOHTTPD_VERSION	"0.2"
+
+#define SERVER_STR "Server: " GOHTTPD_STR "/" GOHTTPD_VERSION " (Unix)\r\n"
+#define MAX_SERVER_STRING	(sizeof(SERVER_STR) + 1)
+
+#define HTML_INDEX_FILE	"index.html"
+
+#define MAX_LINE	1536
+#define MIN_REQUESTS	4
+#define HTTP_BACKLOG	10 /* helps when backed up */
+
+/*
+ * Simplistic connection timeout mechanism.
+ * Every connection has a `last access time' associated with it. An
+ * access is a new connection, a read, or a write. When we have been
+ * idle for POLL_TIMEOUT, we check all the connections. If a
+ * connection has been idle for more than `timeout', we close the
+ * connection.
+ */
+#define POLL_TIMEOUT	1000	/* milliseconds */
+
+#define HTTP_ROOT	"/var/www/htdocs"
+#define HTTP_CHROOT	"/var/www"
+#define HTTP_PIDFILE	"/var/run/gohttpd.pid"
+#define HTTP_CONFIG	"/etc/gohttpd.conf"
+
+#define HTTP_LOGFILE	"/var/log/gohttpd/gohttpd.log"
+#define HTTP_LOG_CHROOT	"/logs/gohttpd.log"
+
+struct connection {
+	int conn_n;
+	struct pollfd *ufd;
+#ifdef HAVE_INET_NTOP
+	struct sockaddr_storage sock_addr;
+#else
+	struct sockaddr_in sock_addr;
+#endif
+	char cmd[MAX_LINE];
+	off_t offset;
+	unsigned int len;
+	int   status;
+#ifdef ALLOW_DIR_LISTINGS
+	struct iovec iovs[3];
+	char *dirbuf;
+#elif defined(USE_SENDFILE)
+	struct iovec iovs[1];
+#else
+	struct iovec iovs[2];
+#endif
+	int n_iovs;
+
+#ifdef USE_SENDFILE
+	int in_fd;
+	off_t in_offset;
+#else
+	unsigned char *buf;
+	unsigned int mapped;
+#endif
+
+	time_t access;
+
+	/* http stuff */
+	int http;
+#define	HTTP_GET	1
+#define HTTP_HEAD	2
+	int persist;
+	char *user_agent; /* combined log only */
+	char *referer;    /* combined log only */
+	/* The http_header needs to be big enough to store an http
+	 * error reply (not counting 301 errors). The largest error
+	 * packet right now is 315 with stock SERVER_STR.
+	 */
+	char http_header[512];
+	char *errorstr; /* for large 301 replies */
+	struct connection *next;
+};
+
+#define SOCKET(c)	((c)->ufd->fd)
+#define set_writeable(c) ((c)->ufd->events = POLLOUT)
 
 static int verbose;
 
@@ -34,8 +138,8 @@ static char *chroot_dir;
 static char *logfile;
 static char *pidfile;
 
-static int   port = HTTP_PORT;
-static char *user = HTTP_USER;
+static int   port = 80;
+static char *user = "apache";
 static uid_t uid  = -1;
 static gid_t gid  = -1;
 static int   max_conns = 25;
@@ -1001,7 +1105,7 @@ static int write_request(struct connection *conn)
 
 #if defined(USE_SENDFILE) && !defined(ALLOW_DIR_LISTINGS)
 		/* Normal case only one iov */
-		if (unlikely(n < conn->iovs->iov_len)) {
+		if (n < conn->iovs->iov_len) {
 			conn->iovs->iov_len -= n;
 			conn->iovs->iov_base += n;
 			time(&conn->access);

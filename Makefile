@@ -9,19 +9,14 @@ CFLAGS += -Wall $(D:1=-g)
 
 ETAGS=`which etags || echo true`
 
-# Pretty print - "borrowed" from sparse Makefile
-V	      = @
-Q	      = $(V:1=)
-QUIET_LINK    = $(Q:@=@echo    '     LINK     '$@;)
-
 all:	gohttpd gostats
 
-gohttpd: gohttpd.c gohttpd.h
-	$(QUIET_LINK)$(CC) -o $@ $< $(LIBS)
-	@$(ETAGS) gohttpd.c gohttpd.h
+gohttpd: gohttpd.c
+	$(CC) $(CFLAGS) -o $@ $< $(LIBS)
+	@$(ETAGS) gohttpd.c
 
 gostats: gostats.c
-	$(QUIET_LINK)$(CC) -o $@ $<
+	$(CC) $(CFLAGS) -o $@ $<
 
 install: all
 	install -D -m644 logrotate.gohttpd ${DESTDIR}/etc/logrotate.d/gohttpd
@@ -30,4 +25,4 @@ install: all
 	install -D -s gostats ${DESTDIR}/usr/bin/gostats
 
 clean:
-	rm -f *.o gohttpd gostats TAGS
+	rm -f gohttpd gostats TAGS
