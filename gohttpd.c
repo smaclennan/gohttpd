@@ -1054,7 +1054,7 @@ static int read_request(struct connection *conn)
 
 	if (conn->cmd[conn->offset - 1] != '\n') {
 		if (conn->offset >= MAX_LINE)
-			return http_error(conn, 413);
+			return http_error(conn, 414);
 		return 0; /* not an error */
 	}
 
