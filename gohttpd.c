@@ -559,20 +559,6 @@ static int gohttpd_stats(struct connection *conn)
 	return 0;
 }
 
-static void check_old_connections(void)
-{
-	struct connection *c;
-	int i;
-	time_t checkpoint;
-
-	checkpoint = time(NULL) - timeout;
-
-	/* Do not close the listen socket */
-	for (c = conns, i = 0; i < max_conns; ++i, ++c)
-		if (SOCKET(c) >= 0 && c->access < checkpoint)
-			close_connection(c, 408);
-}
-
 static void create_pidfile(char *fname)
 {
 	FILE *fp;
@@ -696,6 +682,10 @@ static int http_error(struct connection *conn, int status)
 	case 404:
 		title = "404 Not Found";
 		msg = msg_404;
+		break;
+	case 408:
+		title = "408 Request Timeout";
+		msg = "";
 		break;
 	case 414:
 		title = "414 Request URL Too Large";
@@ -1348,6 +1338,20 @@ static void read_config(char *fname)
 	/* root_dir must be inside chroot_dir */
 	if (do_chroot && strncmp(root_dir, chroot_dir, strlen(chroot_dir)))
 		fatal_error("%s not inside chroot %s", root_dir, chroot_dir);
+}
+
+static void check_old_connections(void)
+{
+	struct connection *c;
+	int i;
+	time_t checkpoint;
+
+	checkpoint = time(NULL) - timeout;
+
+	/* Do not close the listen socket */
+	for (c = conns, i = 0; i < max_conns; ++i, ++c)
+		if (SOCKET(c) >= 0 && c->access < checkpoint)
+			http_error(c, 408);
 }
 
 int main(int argc, char *argv[])
