@@ -432,6 +432,11 @@ static void cleanup(void)
 		if (SOCKET(conn) != -1)
 			close_connection(conn, 500);
 
+	if (log_fp) {
+		fclose(log_fp);
+		log_fp = NULL;
+	}
+
 	free(user);
 	free(root_dir);
 	free(chroot_dir);
