@@ -626,50 +626,6 @@ static const char *msg_500 =
 /* Used for do_dir and http_error301 */
 static char dirbuf[64 * 1024];
 
-/* This is a very specialized build_response just for 301 errors. */
-static int http_error301(struct connection *conn, char *request)
-{
-	const char *title = "301 Moved Permanently";
-	int n;
-
-	n = snprintf(dirbuf, sizeof(dirbuf),
-		     /* http header */
-		     "HTTP/1.0 %s\r\n"
-		     SERVER_STR
-		     "Content-Type: text/html\r\n"
-		     "Location: /%s/\r\n\r\n"
-		     /* html body */
-		     "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
-		     "<html lang=\"en\">\n<head>\n"
-		     "<title>%s</title>\r\n"
-		     "</head>\n<body><h1>%s</h1>\r\n"
-		     "<p>The document has moved <a href=\"/%s/\">here</a>.\r\n"
-		     "</body></html>\r\n",
-		     title, request, title, title, request);
-
-	if (n < sizeof(conn->http_header)) {
-		/* normal case - we fit in header */
-		strcpy(conn->http_header, dirbuf);
-		conn->iovs[0].iov_base = conn->http_header;
-	} else {
-		conn->errorstr = strdup(dirbuf);
-		if (conn->errorstr == NULL) {
-			syslog(LOG_WARNING, "http_error: Out of memory.");
-			close_connection(conn, 301);
-			return 1;
-		}
-		conn->iovs[0].iov_base = conn->errorstr;
-	}
-
-	conn->iovs[0].iov_len  = n;
-	conn->n_iovs = 1;
-	conn->status = 301;
-
-	set_writeable(conn);
-
-	return 0;
-}
-
 /* For all but 301 errors */
 static int http_error(struct connection *conn, int status)
 {
@@ -732,6 +688,50 @@ static int http_error(struct connection *conn, int status)
 	conn->iovs[0].iov_base = conn->http_header;
 	conn->iovs[0].iov_len  = n1;
 	conn->n_iovs = 1;
+
+	set_writeable(conn);
+
+	return 0;
+}
+
+/* This is a very specialized build_response just for 301 errors. */
+static int http_error301(struct connection *conn, char *request)
+{
+	const char *title = "301 Moved Permanently";
+	int n;
+
+	n = snprintf(dirbuf, sizeof(dirbuf),
+		     /* http header */
+		     "HTTP/1.0 %s\r\n"
+		     SERVER_STR
+		     "Content-Type: text/html\r\n"
+		     "Location: /%s/\r\n\r\n"
+		     /* html body */
+		     "<!DOCTYPE HTML PUBLIC \"-//IETF//DTD HTML 2.0//EN\">\r\n"
+		     "<html lang=\"en\">\n<head>\n"
+		     "<title>%s</title>\r\n"
+		     "</head>\n<body><h1>%s</h1>\r\n"
+		     "<p>The document has moved <a href=\"/%s/\">here</a>.\r\n"
+		     "</body></html>\r\n",
+		     title, request, title, title, request);
+
+	if (n < sizeof(conn->http_header)) {
+		/* normal case - we fit in header */
+		strcpy(conn->http_header, dirbuf);
+		conn->iovs[0].iov_base = conn->http_header;
+	} else {
+		conn->errorstr = strdup(dirbuf);
+		if (conn->errorstr == NULL) {
+			syslog(LOG_WARNING, "http_error: Out of memory.");
+			http_error(conn, 500);
+			return 1;
+		}
+		conn->iovs[0].iov_base = conn->errorstr;
+	}
+
+	conn->iovs[0].iov_len  = n;
+	conn->n_iovs = 1;
+	conn->status = 301;
 
 	set_writeable(conn);
 
