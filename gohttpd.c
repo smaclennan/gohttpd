@@ -58,8 +58,7 @@
 
 #define HTML_INDEX_FILE	"index.html"
 
-#define MAX_LINE	1536
-#define MIN_REQUESTS	4
+#define MAX_LINE	1024
 #define HTTP_BACKLOG	10 /* helps when backed up */
 
 /*
@@ -624,14 +623,16 @@ static const char *msg_414 =
 static const char *msg_500 =
 	"An internal server error occurred. Try again later.";
 
+/* Used for do_dir and http_error301 */
+static char dirbuf[64 * 1024];
+
 /* This is a very specialized build_response just for 301 errors. */
 static int http_error301(struct connection *conn, char *request)
 {
-	char str[MAX_LINE + MAX_LINE + MAX_SERVER_STRING + 256];
 	const char *title = "301 Moved Permanently";
 	int n;
 
-	n = snprintf(str, sizeof(str),
+	n = snprintf(dirbuf, sizeof(dirbuf),
 		     /* http header */
 		     "HTTP/1.0 %s\r\n"
 		     SERVER_STR
@@ -648,10 +649,10 @@ static int http_error301(struct connection *conn, char *request)
 
 	if (n < sizeof(conn->http_header)) {
 		/* normal case - we fit in header */
-		strcpy(conn->http_header, str);
+		strcpy(conn->http_header, dirbuf);
 		conn->iovs[0].iov_base = conn->http_header;
 	} else {
-		conn->errorstr = strdup(str);
+		conn->errorstr = strdup(dirbuf);
 		if (conn->errorstr == NULL) {
 			syslog(LOG_WARNING, "http_error: Out of memory.");
 			close_connection(conn, 301);
@@ -796,9 +797,6 @@ static int do_file(struct connection *conn, int fd)
 
 #ifdef ALLOW_DIR_LISTINGS
 #include <dirent.h>
-
-/* SAM HACK FOR NOW */
-static char dirbuf[64 * 1024];
 
 static const char *header =
 	"<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">\n"
