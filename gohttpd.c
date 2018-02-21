@@ -509,7 +509,7 @@ static int new_connection(int csock)
 
 		/* Set *before* any closes */
 		conn->ufd->fd = sock;
-		conn->ufd->events = POLLIN;		\
+		conn->ufd->events = POLLIN;
 		++n_requests;
 		if (i > max_requests)
 			max_requests = i;

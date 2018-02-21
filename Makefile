@@ -19,7 +19,6 @@ install: all
 	install -D -m644 logrotate.gohttpd ${DESTDIR}/etc/logrotate.d/gohttpd
 	install -D rc.gohttpd ${DESTDIR}/etc/rc.d/rc.gohttpd
 	install -D -s gohttpd ${DESTDIR}/usr/sbin/gohttpd
-	install -D -s gostats ${DESTDIR}/usr/bin/gostats
 
 clean:
 	rm -f gohttpd gostats TAGS valgrind.out
