@@ -1432,6 +1432,7 @@ int main(int argc, char *argv[])
 	signal(SIGINT,  sighandler);
 	signal(SIGPIPE, sighandler);
 	signal(SIGCHLD, sighandler);
+	signal(SIGUSR1, sighandler);
 
 	seteuid(uid);
 
