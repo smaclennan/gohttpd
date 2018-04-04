@@ -369,15 +369,11 @@ static void reset_connection(struct connection *conn)
 	conn->referer = NULL;
 	conn->user_agent = NULL;
 	*conn->cmd = 0;
-	if (conn->errorstr) {
-		free(conn->errorstr);
-		conn->errorstr = NULL;
-	}
+	free(conn->errorstr);
+	conn->errorstr = NULL;
 #ifdef ALLOW_DIR_LISTINGS
-	if (conn->dirbuf) {
-		free(conn->dirbuf);
-		conn->dirbuf = NULL;
-	}
+	free(conn->dirbuf);
+	conn->dirbuf = NULL;
 #endif
 
 	conn->status = 200;
@@ -1283,26 +1279,21 @@ static void read_config(char *fname)
 
 			if (strcmp(key, "root") == 0 ||
 			    strcmp(key, "root-dir") == 0) {
-				if (root_dir)
-					free(root_dir);
+				free(root_dir);
 				root_dir = must_strdup(val);
 			} else if (strcmp(key, "chroot-dir") == 0) {
-				if (chroot_dir)
-					free(chroot_dir);
+				free(chroot_dir);
 				chroot_dir = must_strdup(val);
 			} else if (strcmp(key, "logfile") == 0) {
-				if (logfile)
-					free(logfile);
+				free(logfile);
 				logfile = must_strdup(val);
 			} else if (strcmp(key, "pidfile") == 0) {
-				if (pidfile)
-					free(pidfile);
+				free(pidfile);
 				pidfile = must_strdup(val);
 			} else if (strcmp(key, "port") == 0)
 				must_strtol(val, &port);
 			else if (strcmp(key, "user") == 0) {
-				if (user)
-					free(user);
+				free(user);
 				user = must_strdup(val);
 			} else if (strcmp(key, "uid") == 0)
 				must_strtol(val, (int *)&uid);
