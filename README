@@ -1,0 +1,21 @@
+gohttpd is a small, static files only, web server.
+
+It features low resource usage and a single threaded design. It runs
+on Linux and the BSDs. It has some advanced features such as
+sendfile() under Linux and FreeBSD, persistent connections, and is
+configurable.
+
+If a directory does not have an index.html file, it will display a
+listing of the files in the directory.
+
+It is meant to run from a chroot jail. There are only a couple of
+gotchas. The first being if you want to rotate the logs, the logs must
+be inside the jail. For my website (seanm.ca) I have chroot-dir set to
+/var/www and the following directory layout:
+
+/var/www
+|-- logs
+\-- seanm.ca
+
+You also have to keep all the files in the jail, no links to files
+outside the jail.
