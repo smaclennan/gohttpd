@@ -21,4 +21,4 @@ install: all
 	install -D -s gohttpd ${DESTDIR}/usr/sbin/gohttpd
 
 clean:
-	rm -f gohttpd gostats TAGS valgrind.out
+	rm -f gohttpd gostats TAGS

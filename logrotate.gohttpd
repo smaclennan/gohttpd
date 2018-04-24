@@ -2,7 +2,6 @@
 	daily
 	missingok
 	rotate 31
-	copytruncate
 	create 0644 httpd users
 	sharedscripts
 	postrotate
