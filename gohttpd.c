@@ -58,7 +58,7 @@
 
 #define HTML_INDEX_FILE	"index.html"
 
-#define MAX_LINE	1024
+#define MAX_LINE	1500
 #define HTTP_BACKLOG	10 /* helps when backed up */
 
 /*
