@@ -158,6 +158,12 @@ static struct pollfd *ufds;
 static FILE *log_fp;
 static int need_reopen;
 
+static struct vhost {
+	char *vhost;
+	int len;
+} *vhosts;
+static int n_vhosts;
+
 static void sighandler(int signum)
 {
 	switch (signum) {
@@ -941,7 +947,8 @@ int http_get(struct connection *conn)
 	char *e;
 	int fd, rc;
 	char *request = conn->cmd;
-	char dirname[MAX_LINE + 20];
+	char path[MAX_LINE + 20];
+	char *vhost = ".";
 
 	conn->http = *request == 'H' ? HTTP_HEAD : HTTP_GET;
 
@@ -970,10 +977,27 @@ int http_get(struct connection *conn)
 	if (persist)
 		conn->persist = strcasestr(e, "Connection: keep-alive") != NULL;
 
+	if (vhosts) {
+		int i;
+		char *host = strstr(e, "Host:");
+		if (!host) {
+			vhost = vhosts[0].vhost;
+		} else {
+			host += 5;
+			while (*host == ' ') ++host;
+
+			for (i = 0; i < n_vhosts; ++i)
+				if (strncmp(host, vhosts[i].vhost, vhosts[i].len) == 0)
+					break;
+			if (i == n_vhosts) i = 0;
+			vhost = vhosts[i].vhost;
+		}
+	}
+
 	if (*request) {
-		snprintf(dirname, sizeof(dirname) - 20, "%s", request);
-		if (isdir(dirname)) {
-			char *p = dirname + strlen(dirname);
+		snprintf(path, sizeof(path) - 20, "%s/%s", vhost, request);
+		if (isdir(path)) {
+			char *p = path + strlen(path);
 			if (*(p - 1) != '/') {
 				/* We must send back a 301
 				 * response or relative
@@ -982,13 +1006,13 @@ int http_get(struct connection *conn)
 				return http_error301(conn, request);
 			}
 			strcpy(p, HTML_INDEX_FILE);
-			fd = open(dirname, O_RDONLY);
+			fd = open(path, O_RDONLY);
 #ifdef ALLOW_DIR_LISTINGS
 			if (fd < 0) {
 				*p = '\0';
-				fd = open(dirname, O_RDONLY);
+				fd = open(path, O_RDONLY);
 				if (fd >= 0) {
-					rc = do_dir(conn, fd, dirname);
+					rc = do_dir(conn, fd, path);
 					if (rc == 0)
 						set_writeable(conn);
 					return rc;
@@ -996,9 +1020,11 @@ int http_get(struct connection *conn)
 			}
 #endif
 		} else
-			fd = open(dirname, O_RDONLY);
-	} else /* require an index file at the top level */
-		fd = open(HTML_INDEX_FILE, O_RDONLY);
+			fd = open(path, O_RDONLY);
+	} else {/* require an index file at the top level */
+		snprintf(path, sizeof(path), "%s/" HTML_INDEX_FILE, vhost);
+		fd = open(path, O_RDONLY);
+	}
 
 	if (fd < 0)
 		return http_error(conn, 404);
@@ -1254,6 +1280,18 @@ static void must_strtol(char *str, int *value)
 		*value = (int)n;
 }
 
+static void add_vhost(char *vhost)
+{
+	vhosts = realloc(vhosts, (n_vhosts + 1) * sizeof(struct vhost));
+	if (!vhosts) {
+		fputs("out of memory\n", stderr);
+		exit(1);
+	}
+	vhosts[n_vhosts].vhost = must_strdup(vhost);
+	vhosts[n_vhosts].len = strlen(vhost);
+	++n_vhosts;
+}
+
 static void read_config(char *fname)
 {
 	FILE *fp;
@@ -1307,6 +1345,8 @@ static void read_config(char *fname)
 				must_strtol(val, &persist);
 			else if (strcmp(key, "timeout") == 0)
 				must_strtol(val, &timeout);
+			else if (strcmp(key, "vhost") == 0)
+				add_vhost(val);
 			else
 				fatal_error("Unknown config '%s'", key);
 		}
