@@ -499,7 +499,10 @@ static int new_connection(int csock)
 
 		sock = accept_socket(csock, conn);
 		if (sock < 0) {
-			seteuid(uid);
+			if (seteuid(uid)) {
+				syslog(LOG_ERR, "seteuid %d: %m", uid);
+				return -1;
+			}
 
 			if (errno == EWOULDBLOCK)
 				return 0;
@@ -1209,7 +1212,8 @@ static void setup_privs(void)
 		initgroups(pwd->pw_name, pwd->pw_gid);
 	}
 
-	setgid(gid);
+	if (setgid(gid))
+		fatal_error("setgid %d: %m", gid);
 }
 
 static int listen_socket(int port)
@@ -1439,7 +1443,7 @@ int main(int argc, char *argv[])
 		if (daemon(0, 0) == -1)
 			fatal_error("Could not become daemon-process!");
 
-		openlog("gohttpd", LOG_CONS, LOG_DAEMON);
+	openlog("gohttpd", LOG_CONS, LOG_DAEMON);
 
 	syslog(LOG_INFO, "gohttpd " GOHTTPD_VERSION " starting.");
 	time(&started);
@@ -1465,7 +1469,8 @@ int main(int argc, char *argv[])
 	signal(SIGCHLD, sighandler);
 	signal(SIGUSR1, sighandler);
 
-	seteuid(uid);
+	if (seteuid(uid))
+		fatal_error("seteuid %d: %m", uid);
 
 	/* Now it is safe to install */
 	atexit(cleanup);
