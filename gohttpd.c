@@ -1402,7 +1402,7 @@ int main(int argc, char *argv[])
 	int c, i, npoll, go_daemon = 0;
 	struct connection *conn;
 
-	while ((c = getopt(argc, argv, "c:dlm:v")) != -1)
+	while ((c = getopt(argc, argv, "c:dlm:p:v")) != -1)
 		switch (c) {
 		case 'c':
 			config = optarg;
@@ -1415,6 +1415,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'm':
 			max_conns = strtol(optarg, NULL, 0);
+			break;
+		case 'p':
+			port = strtol(optarg, NULL, 0);
 			break;
 		case 'v':
 			++verbose;
