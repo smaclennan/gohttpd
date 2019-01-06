@@ -142,7 +142,7 @@ static char *user = "apache";
 static uid_t uid  = -1;
 static gid_t gid  = -1;
 static int   max_conns = 25;
-static int   do_chroot = -1;
+static int   do_chroot = 0;
 static int   persist;
 static int   timeout = 60; /* seconds */
 static int   logging = 1;
@@ -1199,20 +1199,22 @@ static int write_request(struct connection *conn)
 static void setup_privs(void)
 {
 	/* If you are non-root you cannot set privileges */
-	if (getuid())
-		return;
+	if (user && getuid() == 0) {
+		if (uid == (uid_t)-1 || gid == (uid_t)-1) {
+			struct passwd *pwd = getpwnam(user);
 
-	if (uid == (uid_t)-1 || gid == (uid_t)-1) {
-		struct passwd *pwd = getpwnam(user);
-
-		if (!pwd)
-			fatal_error("No such user: `%s'.", user);
-		if (uid == (uid_t)-1)
-			uid = pwd->pw_uid;
-		if (gid == (uid_t)-1)
-			gid = pwd->pw_gid;
-		initgroups(pwd->pw_name, pwd->pw_gid);
+			if (!pwd)
+				fatal_error("No such user: `%s'.", user);
+			if (uid == (uid_t)-1)
+				uid = pwd->pw_uid;
+			if (gid == (uid_t)-1)
+				gid = pwd->pw_gid;
+			initgroups(pwd->pw_name, pwd->pw_gid);
+		}
 	}
+
+	if (uid == (uid_t)-1) uid = getuid();
+	if (gid == (uid_t)-1) gid = getgid();
 
 	if (setgid(gid))
 		fatal_error("setgid %d: %m", gid);
@@ -1328,6 +1330,7 @@ static void read_config(char *fname)
 			} else if (strcmp(key, "chroot-dir") == 0) {
 				free(chroot_dir);
 				chroot_dir = must_strdup(val);
+				do_chroot = 1;
 			} else if (strcmp(key, "logfile") == 0) {
 				free(logfile);
 				logfile = must_strdup(val);
@@ -1363,15 +1366,12 @@ static void read_config(char *fname)
 	} else if (errno != ENOENT)
 		fatal_error("%s: %m", fname);
 
-	if (do_chroot == -1)
-		do_chroot = getuid() == 0;
-
 	/* Default'em */
 	if (root_dir == NULL)
 		root_dir = must_strdup(HTTP_ROOT);
-	if (chroot_dir == NULL)
+	if (do_chroot && chroot_dir == NULL)
 		chroot_dir = must_strdup(HTTP_CHROOT);
-	if (logfile == NULL)
+	if (logging && logfile == NULL)
 		logfile  =
 			must_strdup(do_chroot ? HTTP_LOG_CHROOT : HTTP_LOGFILE);
 	if (pidfile == NULL)
@@ -1402,13 +1402,16 @@ int main(int argc, char *argv[])
 	int c, i, npoll, go_daemon = 0;
 	struct connection *conn;
 
-	while ((c = getopt(argc, argv, "c:dm:v")) != -1)
+	while ((c = getopt(argc, argv, "c:dlm:v")) != -1)
 		switch (c) {
 		case 'c':
 			config = optarg;
 			break;
 		case 'd':
 			go_daemon = 1;
+			break;
+		case 'l':
+			logging = 0;
 			break;
 		case 'm':
 			max_conns = strtol(optarg, NULL, 0);
@@ -1417,7 +1420,7 @@ int main(int argc, char *argv[])
 			++verbose;
 			break;
 		default:
-			fatal_error("usage: %s [-dv] [-m max_conns] [-c config]\n", *argv);
+			fatal_error("usage: %s [-dlv] [-m max_conns] [-c config]\n", *argv);
 		}
 
 	read_config(config);
