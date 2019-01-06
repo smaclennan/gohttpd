@@ -145,6 +145,7 @@ static int   max_conns = 25;
 static int   do_chroot = -1;
 static int   persist;
 static int   timeout = 60; /* seconds */
+static int   logging = 1;
 
 /* Stats */
 static unsigned int max_requests;
@@ -260,16 +261,17 @@ static void log_reopen(void)
 	}
 }
 
-static int log_open(void)
+static void log_open(void)
 {
+	if (!logging)
+		return;
+
 	log_fp = fopen(logfile, "a");
 	if (log_fp == NULL)
 		fatal_error("Unable to open %s: %m", logfile);
 
 	if (fchown(fileno(log_fp), uid, gid))
 		perror("chown log file");
-
-	return 1;
 }
 
 /* Warning: This is destructive to str */
@@ -298,13 +300,13 @@ static void log_hit(struct connection *conn)
 {
 	char date[32], *p;
 
+	if (!log_fp)
+		return; /* nowhere to write! */
+
 	if (need_reopen) {
 		log_reopen();
 		need_reopen = 0;
 	}
-
-	if (!log_fp)
-		return; /* nowhere to write! */
 
 	if (conn->status == 1000)
 		return; /* don't log stat calls */
@@ -1351,6 +1353,8 @@ static void read_config(char *fname)
 				must_strtol(val, &timeout);
 			else if (strcmp(key, "vhost") == 0)
 				add_vhost(val);
+			else if (strcmp(key, "logging") == 0)
+				must_strtol(val, &logging);
 			else
 				fatal_error("Unknown config '%s'", key);
 		}
