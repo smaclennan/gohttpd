@@ -820,9 +820,9 @@ static const char *header =
 #define TRAILER "<hr>\n</body></html>\n"
 
 /* These need to point at a stable place in your website */
-#define DIR_IMAGE "/real/images/gopher_menu.gif"
-#define IMG_IMAGE "/real/images/gopher_image.gif"
-#define TXT_IMAGE "/real/images/gopher_text.gif"
+#define DIR_IMAGE "/images/gopher_menu.gif"
+#define IMG_IMAGE "/images/gopher_image.gif"
+#define TXT_IMAGE "/images/gopher_text.gif"
 
 static int is_image(const char *fname)
 {
